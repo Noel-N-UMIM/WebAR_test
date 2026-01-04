@@ -24,15 +24,15 @@
         height: 100%;
       }
 
-      /* Custom style for the AR button */
+      /* Custom style for the AR button inside the viewer (Secondary) */
       .ar-button {
         background-color: white;
-        border-radius: 28px; /* Rounded pill shape */
+        border-radius: 28px;
         border: none;
         position: absolute;
-        bottom: 60px; /* Raised higher to avoid iOS bottom bar */
+        bottom: 30px;
         left: 50%;
-        transform: translateX(-50%); /* Center horizontally */
+        transform: translateX(-50%);
         width: auto;
         padding: 12px 24px;
         font-size: 16px;
@@ -40,56 +40,98 @@
         box-shadow: 0px 4px 8px rgba(0,0,0,0.25);
         cursor: pointer;
         font-weight: bold;
-        z-index: 100; /* Ensure it is on top of everything */
+        z-index: 100;
         white-space: nowrap;
-        display: none; /* Default to hidden, model-viewer will show it when ready */
+        display: none;
       }
 
-      /* When model-viewer enables the button, we want it to be block/flex */
       model-viewer > .ar-button[slot="ar-button"] {
         display: inline-block;
       }
 
-      /* Instructions Overlay */
-      #instructions {
-        position: absolute;
-        top: 20px;
+      /* Landing Page Overlay (Primary) */
+      #landing {
+        position: fixed;
+        top: 0;
         left: 0;
         width: 100%;
+        height: 100%;
+        background-color: white;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
         text-align: center;
-        z-index: 5;
-        pointer-events: none;
       }
-      
-      .instruction-text {
-        background-color: rgba(255, 255, 255, 0.85);
-        padding: 10px 20px;
-        border-radius: 20px;
-        display: inline-block;
-        font-size: 16px;
+
+      #landing h1 {
         color: #333;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        font-weight: 500;
+        margin-bottom: 10px;
+        font-size: 24px;
+      }
+
+      #landing p {
+        color: #666;
+        margin-bottom: 30px;
+        max-width: 80%;
+        line-height: 1.5;
+      }
+
+      /* Big Start Button */
+      .start-btn {
+        background-color: #4285f4;
+        color: white;
+        font-size: 18px;
+        padding: 16px 32px;
+        border: none;
+        border-radius: 50px;
+        font-weight: bold;
+        box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
+        cursor: pointer;
+        transition: transform 0.1s;
+      }
+
+      .start-btn:active {
+        transform: scale(0.95);
+      }
+
+      .secondary-btn {
+        margin-top: 20px;
+        background: none;
+        border: none;
+        color: #888;
+        text-decoration: underline;
+        cursor: pointer;
+        font-size: 14px;
       }
     </style>
   </head>
   <body>
 
-    <!-- Visual Hint -->
-    <div id="instructions">
-      <div class="instruction-text">👇 Tap "View in your space" for AR</div>
+    <!-- Landing Page Overlay -->
+    <div id="landing">
+      <h1>Astronaut Experience</h1>
+      <p>Place the astronaut in your room to get started.</p>
+      
+      <!-- Primary Action: Launch AR -->
+      <button class="start-btn" onclick="startExperience()">
+        🚀 Start in AR
+      </button>
+
+      <!-- Fallback: Just view model -->
+      <button class="secondary-btn" onclick="hideLanding()">
+        View 3D Model Only
+      </button>
     </div>
 
     <!-- 
       2. The Model Viewer Component 
-      src: The GLB file for Android/Web.
-      ios-src: The USDZ file specifically for iOS Quick Look.
-      ar: Enables AR mode.
-      ar-modes: Defines the priority (WebXR -> SceneViewer -> Quick Look).
-      ar-scale: Ensures 1:1 scale with real world.
-      ar-placement: floor (default) or wall.
+      We removed 'ios-src' logic here in comments but kept it in attributes.
+      added id="viewer" for JS access.
     -->
     <model-viewer 
+      id="viewer"
       src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
       ios-src="https://modelviewer.dev/shared-assets/models/Astronaut.usdz"
       poster="https://modelviewer.dev/shared-assets/models/Astronaut.webp"
@@ -102,17 +144,41 @@
       ar-scale="auto"
       ar-placement="floor">
 
-      <!-- Custom AR Button (Optional) -->
-      <!-- Note: This button is hidden by default and only shown by model-viewer if AR is supported on the device -->
+      <!-- This button appears if they return to the 3D model view -->
       <button slot="ar-button" class="ar-button">
         👋 View in your space
       </button>
 
-      <!-- Loading Indicator -->
       <div id="lazy-load-poster" slot="poster"></div>
       <div id="button-load" slot="poster-dismiss"></div>
-
     </model-viewer>
+
+    <!-- Logic to handle the custom flow -->
+    <script>
+      const viewer = document.querySelector('#viewer');
+      const landing = document.querySelector('#landing');
+
+      // Function to hide landing and show model
+      function hideLanding() {
+        landing.style.display = 'none';
+      }
+
+      // Function to attempt immediate AR launch
+      function startExperience() {
+        // 1. Hide the landing page so when they return from AR, they see the model
+        hideLanding();
+        
+        // 2. Trigger AR
+        // Note: activateAR() requires a user gesture (like this button click)
+        if (viewer.canActivateAR) {
+          viewer.activateAR();
+        } else {
+          console.log("AR not supported on this device, falling back to 3D view.");
+          // Optional alert if you want to notify them
+          // alert("AR not supported on this device. Showing 3D model instead.");
+        }
+      }
+    </script>
 
   </body>
 </html>
