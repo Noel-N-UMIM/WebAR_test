@@ -5,8 +5,8 @@
     <title>Interactive AR Story (MindAR)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
-    <!-- 1. Libraries: A-Frame and MindAR -->
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <!-- 1. Libraries: A-Frame 1.4.2 (Stable for MindAR) and MindAR -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
     <style>
@@ -25,7 +25,7 @@
       }
 
       .story-box {
-        background: rgba(255, 255, 255, 0.9);
+        background: rgba(255, 255, 255, 0.95);
         padding: 20px;
         border-radius: 15px;
         display: inline-block;
@@ -41,16 +41,17 @@
         background-color: #4285f4;
         color: white;
         border: none;
-        padding: 10px 25px;
+        padding: 12px 30px;
         font-size: 16px;
         border-radius: 25px;
         cursor: pointer;
         font-weight: bold;
         transition: transform 0.1s;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
       }
       button:active { transform: scale(0.95); }
 
-      /* UI: Tracking Lost Overlay */
+      /* UI: Tracking Lost / Scanning Overlay */
       #scanning-overlay {
         position: absolute;
         top: 0;
@@ -75,6 +76,13 @@
         border-radius: 10px;
         background: rgba(0,0,0,0.5);
       }
+
+      #loading-text {
+        display: block;
+        font-size: 14px;
+        margin-bottom: 10px;
+        color: #ffff00;
+      }
     </style>
 
     <script>
@@ -88,6 +96,7 @@
         init: function() {
           // UI Elements
           this.scanningOverlay = document.querySelector('#scanning-overlay');
+          this.loadingText = document.querySelector('#loading-text');
           this.storyUI = document.querySelector('#story-ui');
           this.storyText = document.querySelector('#story-text');
           this.actionBtn = document.querySelector('#action-btn');
@@ -99,15 +108,20 @@
           // Story State
           this.step = 0;
           
+          // 0. Handle Scene Loading
+          this.el.sceneEl.addEventListener('arReady', () => {
+             if(this.loadingText) this.loadingText.style.display = 'none';
+          });
+          
           // 1. Handle Tracking Events
-          // This ensures the experience feels "smooth" by telling the user what to do
-          // instead of just letting the 3D model disappear silently.
           this.marker.addEventListener('targetFound', () => {
+            console.log("Target Found");
             this.scanningOverlay.style.display = 'none';
             this.storyUI.style.display = 'block';
           });
 
           this.marker.addEventListener('targetLost', () => {
+            console.log("Target Lost");
             this.scanningOverlay.style.display = 'flex';
             this.storyUI.style.display = 'none';
           });
@@ -157,6 +171,7 @@
             
             this.character.setAttribute('position', '0.4 0 0');
             this.character.setAttribute('material', 'color', '#4CC3D9');
+            this.character.setAttribute('rotation', '0 0 0');
           }
         }
       });
@@ -167,6 +182,7 @@
     <!-- UI: Scanning / Tracking Lost Overlay -->
     <div id="scanning-overlay">
       <div class="scan-message">
+        <span id="loading-text">Loading AR Engine...<br></span>
         📡 Point camera at the "Raccoon" Image<br>
         <span style="font-size:12px; font-weight:normal">(This is your Set)</span>
       </div>
@@ -183,10 +199,10 @@
 
     <!-- 
       MindAR Scene 
-      Note: We only need maxTrack: 1 for a single "Set" object.
+      - uiLoading: no; uiScanning: no -> We hide default MindAR UI to use our own.
     -->
     <a-scene 
-      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/band/band.mind; maxTrack: 1; filterMinCF:0.0001; filterBeta: 0.001" 
+      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/band/band.mind; maxTrack: 1; filterMinCF:0.0001; filterBeta: 0.001; uiLoading: no; uiScanning: no" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
@@ -197,6 +213,10 @@
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <!-- LIGHTING: Essential for visibility -->
+      <a-light type="ambient" intensity="1"></a-light>
+      <a-light type="directional" position="0 0 1" intensity="0.5"></a-light>
 
       <!-- 
         THE SET ANCHOR (Raccoon Marker)
