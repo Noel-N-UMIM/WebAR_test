@@ -2,266 +2,208 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Universal WebAR (Model Viewer)</title>
+    <title>Multi-Marker Interaction (MindAR)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
-    <!-- 1. Import Google's <model-viewer> component -->
-    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+    <!-- 1. Libraries: A-Frame and MindAR -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
     <style>
-      /* Make the viewer fill the screen */
-      body {
-        margin: 0;
-        padding: 0;
-        width: 100vw;
-        height: 100vh;
-        background-color: #f0f0f0;
-        font-family: Roboto, sans-serif;
-      }
+      body { margin: 0; overflow: hidden; font-family: sans-serif; }
       
-      model-viewer {
-        width: 100%;
-        height: 100%;
-      }
-
-      /* Custom style for the AR button inside the viewer (Secondary) */
-      .ar-button {
-        background-color: white;
-        border-radius: 28px;
-        border: none;
+      /* UI Overlay */
+      #overlay {
         position: absolute;
-        bottom: 30px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: auto;
-        padding: 12px 24px;
-        font-size: 16px;
-        color: #4285f4;
-        box-shadow: 0px 4px 8px rgba(0,0,0,0.25);
-        cursor: pointer;
-        font-weight: bold;
-        z-index: 100;
-        white-space: nowrap;
-        display: none;
-      }
-
-      model-viewer > .ar-button[slot="ar-button"] {
-        display: inline-block;
-      }
-
-      /* Landing Page Overlay (Primary) */
-      #landing {
-        position: fixed;
-        top: 0;
+        top: 20px;
         left: 0;
         width: 100%;
-        height: 100%;
-        background-color: white;
-        z-index: 9999;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
         text-align: center;
-      }
-
-      #landing h1 {
-        color: #333;
-        margin-bottom: 10px;
-        font-size: 24px;
-      }
-
-      #landing p {
-        color: #666;
-        margin-bottom: 30px;
-        max-width: 80%;
-        line-height: 1.5;
-      }
-      
-      .steps-container {
-        text-align: left;
-        background: #f8f9fa;
-        padding: 20px;
-        border-radius: 12px;
-        margin-bottom: 30px;
-        max-width: 280px;
-      }
-      
-      .step {
-        margin-bottom: 10px;
-        color: #555;
-        font-size: 14px;
-      }
-      .step strong { color: #333; }
-
-      /* Big Start Button */
-      .start-btn {
-        background-color: #4285f4;
-        color: white;
-        font-size: 18px;
-        padding: 16px 32px;
-        border: none;
-        border-radius: 50px;
-        font-weight: bold;
-        box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
-        cursor: pointer;
-        transition: transform 0.1s;
-      }
-
-      .start-btn:active {
-        transform: scale(0.95);
-      }
-
-      .secondary-btn {
-        margin-top: 20px;
-        background: none;
-        border: none;
-        color: #888;
-        text-decoration: underline;
-        cursor: pointer;
-        font-size: 14px;
-      }
-
-      /* --- NEW: AR Prompt (Scanning UI) --- */
-      /* This appears when AR starts but surface is not yet found */
-      #ar-prompt {
-        position: absolute;
-        left: 50%;
-        bottom: 175px;
-        transform: translateX(-50%);
-        text-align: center;
-        z-index: 1000;
+        z-index: 10;
         pointer-events: none;
+      }
+      
+      .instruction-box {
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 15px 25px;
+        border-radius: 30px;
+        display: inline-block;
+        max-width: 80%;
+      }
+
+      h1 { margin: 0 0 5px 0; font-size: 18px; color: #4dc3ff; }
+      p { margin: 0; font-size: 14px; color: #ddd; }
+
+      /* Visual feedback for connection */
+      #connection-line {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 2px;
+        background: lime;
+        transform-origin: top left;
         display: none;
       }
-      
-      /* model-viewer automatically toggles visibility of the slot */
-      model-viewer > #ar-prompt {
-        display: block;
-        opacity: 0;
-        transition: opacity 0.3s;
-      }
-      
-      /* CSS trick to show prompt when object is NOT placed yet */
-      model-viewer:not([ar-status="object-placed"]) > #ar-prompt {
-        opacity: 1;
-      }
-
-      #ar-prompt img {
-        width: 60px;
-        height: 60px;
-        animation: circle 4s linear infinite;
-        opacity: 0.8;
-      }
-
-      #ar-prompt p {
-        color: white;
-        font-weight: bold;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-        margin-top: 10px;
-        font-size: 16px;
-        background-color: rgba(0,0,0,0.6); /* Darker background for readability */
-        padding: 8px 16px;
-        border-radius: 12px;
-      }
-
-      @keyframes circle {
-        0% { transform: translateX(0) rotate(0deg); }
-        25% { transform: translateX(20px) rotate(10deg); }
-        50% { transform: translateX(0) rotate(0deg); }
-        75% { transform: translateX(-20px) rotate(-10deg); }
-        100% { transform: translateX(0) rotate(0deg); }
-      }
     </style>
+
+    <script>
+      /**
+       * Component: multi-marker-logic
+       * Tracks the position of two markers and triggers an event when they are close.
+       */
+      AFRAME.registerComponent('multi-marker-logic', {
+        init: function() {
+          // Get references to our entities
+          this.baseMarker = document.querySelector('#marker-base');     // Raccoon
+          this.charMarker = document.querySelector('#marker-char');     // Bear
+          
+          this.baseObj = document.querySelector('#base-platform');
+          this.charObj = document.querySelector('#character-ball');
+          
+          this.isLinked = false;
+        },
+
+        tick: function() {
+          if (!this.baseMarker || !this.charMarker) return;
+
+          // 1. Check if both markers are currently visible
+          const baseVisible = !this.baseMarker.getAttribute('mindar-image-target').hidden; // Note: MindAR logic is inverted or property based, usually check object3D.visible
+          const charVisible = !this.charMarker.getAttribute('mindar-image-target').hidden;
+          
+          // MindAR 1.2.5 specific visibility check relies on the event listeners usually, 
+          // but checking object3D.visible is reliable in the scene graph.
+          const isBaseVisible = this.baseMarker.object3D.visible;
+          const isCharVisible = this.charMarker.object3D.visible;
+
+          if (isBaseVisible && isCharVisible) {
+            
+            // 2. Get World Positions
+            const basePos = new THREE.Vector3();
+            const charPos = new THREE.Vector3();
+            
+            this.baseMarker.object3D.getWorldPosition(basePos);
+            this.charMarker.object3D.getWorldPosition(charPos);
+
+            // 3. Calculate Distance
+            const distance = basePos.distanceTo(charPos);
+
+            // 4. Logic: If close enough (e.g., 0.5 units), trigger jump
+            if (distance < 0.6 && !this.isLinked) {
+              this.linkObjects();
+            } else if (distance >= 0.6 && this.isLinked) {
+              this.unlinkObjects();
+            }
+
+          } else {
+            // Reset if tracking is lost
+            if (this.isLinked) this.unlinkObjects();
+          }
+        },
+
+        linkObjects: function() {
+          this.isLinked = true;
+          
+          // Visual Feedback: Turn Green
+          this.charObj.setAttribute('material', 'color', '#00ff00');
+          this.baseObj.setAttribute('material', 'color', '#00ff00');
+
+          // Action: Jump Animation (Scale up/down to simulate excitement)
+          this.charObj.setAttribute('animation', {
+            property: 'position',
+            to: '0 1 0', // Jump up relative to marker
+            dur: 300,
+            easing: 'easeOutQuad',
+            loop: 2,
+            dir: 'alternate'
+          });
+          
+          // Show text
+          document.querySelector('#status-text').textContent = "Linked! Markers Connected.";
+        },
+
+        unlinkObjects: function() {
+          this.isLinked = false;
+          
+          // Reset Colors
+          this.charObj.setAttribute('material', 'color', '#4CC3D9'); // Blue
+          this.baseObj.setAttribute('material', 'color', '#FF4444'); // Red
+
+          // Reset Position
+          this.charObj.removeAttribute('animation');
+          this.charObj.setAttribute('position', '0 0 0');
+          
+          document.querySelector('#status-text').textContent = "Move images closer together...";
+        }
+      });
+    </script>
   </head>
   <body>
 
-    <!-- Landing Page Overlay -->
-    <div id="landing">
-      <h1>Astronaut Experience</h1>
-      <p>Place the astronaut in your room.</p>
-      
-      <!-- Instructions to prep user -->
-      <div class="steps-container">
-        <div class="step">1. Tap <strong>Start in AR</strong> below.</div>
-        <div class="step">2. Move phone to <strong>scan the floor</strong>.</div>
-        <div class="step">3. <strong>Object appears</strong> automatically.</div>
+    <!-- UI Overlay -->
+    <div id="overlay">
+      <div class="instruction-box">
+        <h1>Multi-Marker Demo</h1>
+        <p id="status-text">Scan "Raccoon" and "Bear" images simultaneously.</p>
+        <p style="font-size: 11px; margin-top:5px; color:#aaa;">(Need the images? Check the chat)</p>
       </div>
-      
-      <!-- Primary Action: Launch AR -->
-      <button class="start-btn" onclick="startExperience()">
-        🚀 Start in AR
-      </button>
-
-      <!-- Fallback: Just view model -->
-      <button class="secondary-btn" onclick="hideLanding()">
-        View 3D Model Only
-      </button>
     </div>
 
     <!-- 
-      2. The Model Viewer Component 
-      UPDATED: ar-modes="scene-viewer webxr quick-look"
-      This prioritizes the native Android 'Scene Viewer' app over WebXR.
-      Scene Viewer guarantees the standard "dots/grid" scanning UI on Android.
-      iOS Quick Look (native) will still be used on iPhones.
+      MindAR Scene 
+      imageTargetSrc: The compiled .mind file containing both Raccoon and Bear.
+      maxTrack: 2 (Crucial! Allows tracking 2 images at once)
     -->
-    <model-viewer 
-      id="viewer"
-      src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
-      ios-src="https://modelviewer.dev/shared-assets/models/Astronaut.usdz"
-      poster="https://modelviewer.dev/shared-assets/models/Astronaut.webp"
-      alt="A 3D model of an astronaut"
-      shadow-intensity="1"
-      camera-controls
-      auto-rotate
-      ar
-      ar-modes="scene-viewer webxr quick-look"
-      ar-scale="auto"
-      ar-placement="floor">
+    <a-scene 
+      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/band/band.mind; maxTrack: 2" 
+      color-space="sRGB" 
+      renderer="colorManagement: true, physicallyCorrectLights" 
+      vr-mode-ui="enabled: false" 
+      device-orientation-permission-ui="enabled: false"
+      multi-marker-logic>
 
-      <!-- This button appears if they return to the 3D model view -->
-      <button slot="ar-button" class="ar-button">
-        👋 View in your space
-      </button>
+      <a-assets>
+        <!-- No external models, using primitives for stability -->
+      </a-assets>
 
-      <!-- Custom AR Prompt (Scanning UI) -->
-      <!-- Updated text to guide the flow better -->
-      <div id="ar-prompt" slot="ar-prompt">
-        <img src="https://modelviewer.dev/shared-assets/icons/hand.png">
-        <p>Move device to find floor.<br>Object will snap to grid.</p>
-      </div>
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <div id="lazy-load-poster" slot="poster"></div>
-      <div id="button-load" slot="poster-dismiss"></div>
-    </model-viewer>
-
-    <!-- Logic to handle the custom flow -->
-    <script>
-      const viewer = document.querySelector('#viewer');
-      const landing = document.querySelector('#landing');
-
-      // Function to hide landing and show model
-      function hideLanding() {
-        landing.style.display = 'none';
-      }
-
-      // Function to attempt immediate AR launch
-      function startExperience() {
-        // 1. Hide the landing page so when they return from AR, they see the model
-        hideLanding();
+      <!-- 
+        Marker 1: The "Base" (Index 0 = Raccoon) 
+        Shows a Red Platform
+      -->
+      <a-entity id="marker-base" mindar-image-target="targetIndex: 0">
+        <a-cylinder 
+          id="base-platform"
+          position="0 0 0" 
+          height="0.1" 
+          radius="0.5" 
+          color="#FF4444" 
+          opacity="0.8">
+        </a-cylinder>
         
-        // 2. Trigger AR
-        // Note: activateAR() requires a user gesture (like this button click)
-        if (viewer.canActivateAR) {
-          viewer.activateAR();
-        } else {
-          console.log("AR not supported on this device, falling back to 3D view.");
-          // Optional alert if you want to notify them
-          // alert("AR not supported on this device. Showing 3D model instead.");
-        }
-      }
-    </script>
+        <!-- Text Label -->
+        <a-text value="Base" position="0 0.5 0" align="center" color="white" scale="0.5 0.5 0.5"></a-text>
+      </a-entity>
 
+      <!-- 
+        Marker 2: The "Character" (Index 1 = Bear)
+        Shows a Blue Sphere
+      -->
+      <a-entity id="marker-char" mindar-image-target="targetIndex: 1">
+        <a-sphere 
+          id="character-ball"
+          position="0 0 0" 
+          radius="0.3" 
+          color="#4CC3D9"
+          animation="property: scale; to: 1.1 1.1 1.1; dir: alternate; loop: true; dur: 1000">
+        </a-sphere>
+        
+        <!-- Text Label -->
+        <a-text value="Character" position="0 0.5 0" align="center" color="white" scale="0.5 0.5 0.5"></a-text>
+      </a-entity>
+
+    </a-scene>
   </body>
 </html>
