@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>WebAR Stabilized Tool</title>
+    <title>WebAR Tool with Gestures</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     
@@ -17,21 +17,122 @@
       .instruction-box {
         background: rgba(0, 0, 0, 0.6); color: white; padding: 10px 20px;
         margin-bottom: 10px; border-radius: 8px; font-family: sans-serif; text-align: center;
+        pointer-events: auto; /* Allow text selection/clicks if needed */
       }
-      /* New Lock Button */
       #lock-button {
         background-color: #ff4081; color: white; border: none;
         padding: 12px 24px; border-radius: 30px; font-size: 16px; font-weight: bold;
         margin-bottom: 40px; pointer-events: auto; cursor: pointer;
-        opacity: 0.5; /* Disabled appearance initially */
-        transition: opacity 0.3s;
+        opacity: 0.5; transition: opacity 0.3s;
       }
       #lock-button.active { opacity: 1; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
     </style>
+
+    <script>
+      // Component: gesture-detector
+      // Listens for touch inputs (pinch/drag) on the scene
+      AFRAME.registerComponent('gesture-detector', {
+        schema: { element: { default: '' } },
+        init: function() {
+          this.targetElement = this.data.element && document.querySelector(this.data.element);
+          if (!this.targetElement) { this.targetElement = this.el; }
+          this.internalState = { previousState: null };
+          this.emitGestureEvent = this.emitGestureEvent.bind(this);
+          this.targetElement.addEventListener("touchstart", this.emitGestureEvent);
+          this.targetElement.addEventListener("touchend", this.emitGestureEvent);
+          this.targetElement.addEventListener("touchmove", this.emitGestureEvent);
+        },
+        remove: function() {
+          this.targetElement.removeEventListener("touchstart", this.emitGestureEvent);
+          this.targetElement.removeEventListener("touchend", this.emitGestureEvent);
+          this.targetElement.removeEventListener("touchmove", this.emitGestureEvent);
+        },
+        emitGestureEvent: function(event) {
+          const currentState = this.getTouchState(event);
+          const previousState = this.internalState.previousState;
+          const gestureContinues = previousState && currentState && currentState.touchCount == previousState.touchCount;
+          const gestureEnded = previousState && !gestureContinues;
+          const gestureStarted = currentState && !gestureContinues;
+
+          if (gestureEnded) {
+            const eventName = this.getEventPrefix(previousState.touchCount) + "fingerend";
+            this.el.emit(eventName, previousState);
+            this.internalState.previousState = null;
+          }
+          if (gestureStarted) {
+            currentState.startTime = performance.now();
+            currentState.startPosition = currentState.position;
+            currentState.startSpread = currentState.spread;
+            const eventName = this.getEventPrefix(currentState.touchCount) + "fingerstart";
+            this.el.emit(eventName, currentState);
+            this.internalState.previousState = currentState;
+          }
+          if (gestureContinues) {
+            const eventDetail = {
+              positionChange: { x: currentState.position.x - previousState.position.x, y: currentState.position.y - previousState.position.y },
+              spreadChange: currentState.spread - previousState.spread,
+              startSpread: currentState.startSpread,
+              position: currentState.position,
+              spread: currentState.spread
+            };
+            const eventName = this.getEventPrefix(currentState.touchCount) + "fingermove";
+            this.el.emit(eventName, eventDetail);
+            this.internalState.previousState = currentState;
+          }
+        },
+        getTouchState: function(event) {
+          if (event.touches.length === 0) return null;
+          const touchList = [];
+          for (let i = 0; i < event.touches.length; i++) { touchList.push(event.touches[i]); }
+          const touchState = { touchCount: touchList.length };
+          const centerPosition = touchList.reduce((sum, touch) => ({ x: sum.x + touch.clientX, y: sum.y + touch.clientY }), { x: 0, y: 0 });
+          touchState.position = { x: centerPosition.x / touchList.length, y: centerPosition.y / touchList.length };
+          if (touchList.length >= 2) {
+            const dx = touchList[0].clientX - touchList[1].clientX;
+            const dy = touchList[0].clientY - touchList[1].clientY;
+            touchState.spread = Math.sqrt(dx * dx + dy * dy);
+          }
+          return touchState;
+        },
+        getEventPrefix: function(touchCount) {
+          return touchCount === 1 ? "one" : (touchCount === 2 ? "two" : "multi");
+        }
+      });
+
+      // Component: gesture-handler
+      // Reacts to gestures to scale/rotate/move the entity
+      AFRAME.registerComponent('gesture-handler', {
+        schema: { enabled: { default: true }, minScale: { default: 0.1 }, maxScale: { default: 8 } },
+        init: function() {
+          this.handleScale = this.handleScale.bind(this);
+          this.handleRotation = this.handleRotation.bind(this);
+          this.isVisible = false;
+          this.initialScale = this.el.object3D.scale.clone();
+          this.scaleFactor = 1;
+          
+          this.el.sceneEl.addEventListener("twofingermove", this.handleScale);
+          this.el.sceneEl.addEventListener("onefingermove", this.handleRotation);
+        },
+        handleScale: function(event) {
+          if (!this.data.enabled) return;
+          this.scaleFactor *= 1 + event.detail.spreadChange / event.detail.startSpread;
+          this.scaleFactor = Math.min(Math.max(this.scaleFactor, this.data.minScale), this.data.maxScale);
+          this.el.object3D.scale.x = this.scaleFactor * this.initialScale.x;
+          this.el.object3D.scale.y = this.scaleFactor * this.initialScale.y;
+          this.el.object3D.scale.z = this.scaleFactor * this.initialScale.z;
+        },
+        handleRotation: function(event) {
+          if (!this.data.enabled) return;
+          // We can use one finger to rotate OR move depending on preference.
+          // Here we map X-movement to rotation Y
+          this.el.object3D.rotation.y += event.detail.positionChange.x * 0.005;
+          // Optional: Map Y-movement to moving the object up/down or closer/further
+        }
+      });
+    </script>
   </head>
   <body>
     
-    <!-- UI Overlay -->
     <div id="ui-overlay">
       <div class="instruction-box" id="status-text">
         Point camera at the <b>Demo Card</b>
@@ -39,30 +140,26 @@
       <button id="lock-button" disabled>🔒 Lock Position</button>
     </div>
 
-    <!-- 
-      Scene Configuration
-      1. filterMinCF: 0.0001 -> Reduces jitter (smooths heavily).
-      2. filterBeta: 0.001 -> Reduces lag overshoot.
-    -->
+    <!-- Added gesture-detector to scene -->
     <a-scene 
       mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; filterMinCF:0.0001; filterBeta: 0.001;" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
-      device-orientation-permission-ui="enabled: false">
+      device-orientation-permission-ui="enabled: false"
+      gesture-detector>
       
       <a-assets>
         <a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf"></a-asset-item>
       </a-assets>
 
-      <!-- Camera: look-controls disabled initially (MindAR controls it) -->
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- Target Entity -->
       <a-entity id="target-entity" mindar-image-target="targetIndex: 0">
         
-        <!-- Wrapper for content: easier to detach/move as a group -->
-        <a-entity id="ar-content">
+        <!-- Added gesture-handler to content wrapper -->
+        <!-- Added class="clickable" to ensure raycasting hits it -->
+        <a-entity id="ar-content" gesture-handler>
           <a-plane color="blue" opacity="0.5" position="0 0 0" height="0.552" width="1" rotation="0 0 0"></a-plane>
           <a-gltf-model 
             rotation="0 0 0" 
@@ -87,9 +184,8 @@
       let isLocked = false;
       let isTargetVisible = false;
 
-      // 1. Detect when target is found to enable the Lock button
       targetEntity.addEventListener("targetFound", event => {
-        if(isLocked) return; // Ignore if already locked
+        if(isLocked) return;
         isTargetVisible = true;
         lockButton.disabled = false;
         lockButton.classList.add('active');
@@ -97,19 +193,16 @@
       });
 
       targetEntity.addEventListener("targetLost", event => {
-        if(isLocked) return; // Ignore if already locked
+        if(isLocked) return;
         isTargetVisible = false;
         lockButton.disabled = true;
         lockButton.classList.remove('active');
         statusText.innerText = "Target Lost. Point at card.";
       });
 
-      // 2. The Lock Logic
       lockButton.addEventListener('click', () => {
         if (!isTargetVisible || isLocked) return;
 
-        // A. Calculate current World Position/Rotation
-        // We must grab the world transforms before detaching
         const worldPos = new THREE.Vector3();
         const worldQuat = new THREE.Quaternion();
         const worldScale = new THREE.Vector3();
@@ -118,29 +211,19 @@
         arContent.object3D.getWorldQuaternion(worldQuat);
         arContent.object3D.getWorldScale(worldScale);
 
-        // B. Detach content from the Target and attach to Scene
-        // This stops the content from hiding when target is lost
         scene.object3D.add(arContent.object3D);
 
-        // C. Apply the saved World Transforms to the new parent
         arContent.object3D.position.copy(worldPos);
         arContent.object3D.quaternion.copy(worldQuat);
         arContent.object3D.scale.copy(worldScale);
 
-        // D. Enable "Look Controls" on Camera
-        // This allows the user to rotate the phone (gyro) to look around the now-stationary object
         camera.setAttribute('look-controls', 'enabled: true');
 
-        // E. Stop the AR tracking engine to save CPU/Battery
-        // We pause the system, but keep the video feed alive
-        // (Note: In some versions of MindAR, pausing system might freeze video. 
-        // Safer way is just removing the listener logic, but let's try just setting state).
         isLocked = true;
-        lockButton.innerText = "Position Locked (3DOF)";
-        lockButton.style.backgroundColor = "#4CAF50"; // Green
-        statusText.innerText = "Overlay Locked. You can move freely.";
+        lockButton.innerText = "Locked (Pinch to Resize)";
+        lockButton.style.backgroundColor = "#4CAF50";
+        statusText.innerHTML = "<b>Locked!</b><br>1 Finger: Rotate<br>2 Fingers: Resize";
         
-        // Disable the target entity logic so it doesn't try to grab it back
         targetEntity.removeAttribute('mindar-image-target');
       });
     </script>
