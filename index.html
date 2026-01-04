@@ -1,267 +1,180 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>WebAR Tool with Stable Gestures</title>
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <meta charset="utf-8">
+    <title>Self-Hosted Image Handoff (MindAR)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     
+    <!-- UI Styles -->
     <style>
-      body { margin: 0; overflow: hidden; }
-      #ui-overlay {
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      #overlay {
+        position: absolute;
+        bottom: 30px;
+        left: 0;
+        width: 100%;
+        text-align: center;
+        z-index: 10;
         pointer-events: none;
-        display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
-        z-index: 100;
+        display: none;
       }
-      .instruction-box {
-        background: rgba(0, 0, 0, 0.6); color: white; padding: 10px 20px;
-        margin-bottom: 10px; border-radius: 8px; font-family: sans-serif; text-align: center;
+      
+      #place-button {
         pointer-events: auto;
+        padding: 12px 24px;
+        font-size: 18px;
+        font-weight: bold;
+        background-color: #ff5e5e; /* Red for MindAR theme */
+        color: white;
+        border: 2px solid white;
+        border-radius: 25px;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 1px;
       }
-      .controls {
-        display: flex; gap: 10px; margin-bottom: 40px; pointer-events: auto;
+
+      #place-button:active {
+        transform: scale(0.95);
+        background-color: #e04e4e;
       }
-      button {
-        background-color: #ff4081; color: white; border: none;
-        padding: 12px 24px; border-radius: 30px; font-size: 16px; font-weight: bold;
-        cursor: pointer; transition: all 0.3s; opacity: 0.8;
-      }
-      button:disabled { opacity: 0.4; cursor: not-allowed; }
-      button.active { opacity: 1; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-      #reset-button { background-color: #444; }
     </style>
 
+    <!-- 1. A-Frame and MindAR Libraries (No API Key needed) -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
     <script>
-      // Component: gesture-detector
-      // Robust touch detection for pinch (2 fingers) and drag (1 finger)
-      AFRAME.registerComponent('gesture-detector', {
-        schema: { element: { default: '' } },
-        init: function() {
-          this.targetElement = this.data.element && document.querySelector(this.data.element);
-          if (!this.targetElement) { this.targetElement = this.el; }
-          this.internalState = { previousState: null };
-          this.emitGestureEvent = this.emitGestureEvent.bind(this);
-          this.targetElement.addEventListener("touchstart", this.emitGestureEvent);
-          this.targetElement.addEventListener("touchend", this.emitGestureEvent);
-          this.targetElement.addEventListener("touchmove", this.emitGestureEvent);
+      /**
+       * Component: world-transfer
+       * Adapted for MindAR
+       * * Note: MindAR does not support SLAM (World Tracking). 
+       * When we detach the object, it will hang in 3DoF space (Rotation only).
+       * If the user walks physically, the object will drift with them.
+       */
+      AFRAME.registerComponent('world-transfer', {
+        schema: {
+          target: {type: 'selector'},
+          button: {type: 'selector'}
         },
-        remove: function() {
-          this.targetElement.removeEventListener("touchstart", this.emitGestureEvent);
-          this.targetElement.removeEventListener("touchend", this.emitGestureEvent);
-          this.targetElement.removeEventListener("touchmove", this.emitGestureEvent);
-        },
-        emitGestureEvent: function(event) {
-          const currentState = this.getTouchState(event);
-          const previousState = this.internalState.previousState;
-          const gestureContinues = previousState && currentState && currentState.touchCount == previousState.touchCount;
-          const gestureEnded = previousState && !gestureContinues;
-          const gestureStarted = currentState && !gestureContinues;
 
-          if (gestureEnded) {
-            const eventName = this.getEventPrefix(previousState.touchCount) + "fingerend";
-            this.el.emit(eventName, previousState);
-            this.internalState.previousState = null;
-          }
-          if (gestureStarted) {
-            currentState.startTime = performance.now();
-            currentState.startPosition = currentState.position;
-            currentState.startSpread = currentState.spread;
-            const eventName = this.getEventPrefix(currentState.touchCount) + "fingerstart";
-            this.el.emit(eventName, currentState);
-            this.internalState.previousState = currentState;
-          }
-          if (gestureContinues) {
-            const eventDetail = {
-              positionChange: { x: currentState.position.x - previousState.position.x, y: currentState.position.y - previousState.position.y },
-              spreadChange: currentState.spread - previousState.spread,
-              startSpread: currentState.startSpread,
-              position: currentState.position,
-              spread: currentState.spread
-            };
-            const eventName = this.getEventPrefix(currentState.touchCount) + "fingermove";
-            this.el.emit(eventName, eventDetail);
-            this.internalState.previousState = currentState;
-          }
-        },
-        getTouchState: function(event) {
-          if (event.touches.length === 0) return null;
-          const touchList = [];
-          for (let i = 0; i < event.touches.length; i++) { touchList.push(event.touches[i]); }
-          const touchState = { touchCount: touchList.length };
-          const centerPosition = touchList.reduce((sum, touch) => ({ x: sum.x + touch.clientX, y: sum.y + touch.clientY }), { x: 0, y: 0 });
-          touchState.position = { x: centerPosition.x / touchList.length, y: centerPosition.y / touchList.length };
-          if (touchList.length >= 2) {
-            const dx = touchList[0].clientX - touchList[1].clientX;
-            const dy = touchList[0].clientY - touchList[1].clientY;
-            touchState.spread = Math.sqrt(dx * dx + dy * dy);
-          }
-          return touchState;
-        },
-        getEventPrefix: function(touchCount) {
-          return touchCount === 1 ? "one" : (touchCount === 2 ? "two" : "multi");
-        }
-      });
-
-      // Component: gesture-handler
-      // Fixed math for stable scaling
-      AFRAME.registerComponent('gesture-handler', {
-        schema: { 
-          enabled: { default: true }, 
-          minScale: { default: 0.05 }, // Prevent disappearing
-          maxScale: { default: 12 } 
-        },
         init: function() {
-          this.handleScale = this.handleScale.bind(this);
-          this.handleScaleStart = this.handleScaleStart.bind(this);
-          this.handleRotation = this.handleRotation.bind(this);
-          
-          this.scaleStart = new THREE.Vector3();
-          
-          this.el.sceneEl.addEventListener("twofingerstart", this.handleScaleStart);
-          this.el.sceneEl.addEventListener("twofingermove", this.handleScale);
-          this.el.sceneEl.addEventListener("onefingermove", this.handleRotation);
-        },
-        handleScaleStart: function(event) {
-          // Freeze the scale state when the pinch begins
-          this.scaleStart.copy(this.el.object3D.scale);
-        },
-        handleScale: function(event) {
-          if (!this.data.enabled) return;
-          
-          // Calculate the ratio: Current Spread / Start Spread
-          // This is much more stable than adding frame-to-frame changes
-          const spreadRatio = event.detail.spread / event.detail.startSpread;
-          
-          // Apply ratio to the scale at the start of the gesture
-          let newScale = this.scaleStart.x * spreadRatio;
-          
-          // Clamp strictly
-          newScale = Math.min(Math.max(newScale, this.data.minScale), this.data.maxScale);
-          
-          this.el.object3D.scale.set(newScale, newScale, newScale);
-        },
-        handleRotation: function(event) {
-          if (!this.data.enabled) return;
-          // Rotate Y axis based on drag distance
-          this.el.object3D.rotation.y += event.detail.positionChange.x * 0.005;
+          const targetEl = this.data.target;
+          const buttonEl = this.data.button;
+          const overlayEl = buttonEl ? buttonEl.parentElement : null;
+
+          if (!targetEl || !buttonEl) return;
+
+          // 1. Listen for MindAR events
+          this.el.addEventListener('targetFound', () => {
+            // Show button if not yet transferred
+            if (targetEl.parentNode !== this.el.sceneEl) {
+              overlayEl.style.display = 'block';
+            }
+          });
+
+          this.el.addEventListener('targetLost', () => {
+            // Hide button if we haven't locked it yet
+            if (targetEl.parentNode !== this.el.sceneEl) {
+              overlayEl.style.display = 'none';
+            }
+          });
+
+          // 2. Transfer Logic
+          const performTransfer = () => {
+            if (targetEl.parentNode === this.el.sceneEl) return;
+
+            console.log('Initiating Transfer...');
+            overlayEl.style.display = 'none';
+
+            // Capture World Transforms
+            const worldPos = new THREE.Vector3();
+            const worldQuat = new THREE.Quaternion();
+            const worldScale = new THREE.Vector3();
+            
+            targetEl.object3D.getWorldPosition(worldPos);
+            targetEl.object3D.getWorldQuaternion(worldQuat);
+            targetEl.object3D.getWorldScale(worldScale);
+
+            // Detach and Attach to Scene
+            targetEl.parentNode.removeChild(targetEl);
+            this.el.sceneEl.appendChild(targetEl);
+
+            // Re-apply transforms
+            // We use setTimeout to allow the DOM to update
+            setTimeout(() => {
+              targetEl.object3D.position.copy(worldPos);
+              targetEl.object3D.quaternion.copy(worldQuat);
+              targetEl.object3D.scale.copy(worldScale);
+              targetEl.setAttribute('visible', 'true');
+              
+              // Flash effect
+              targetEl.setAttribute('animation__flash', {
+                property: 'material.emissive',
+                from: '#FFFFFF',
+                to: '#000000',
+                dur: 300
+              });
+            }, 50);
+          };
+
+          buttonEl.addEventListener('click', performTransfer);
         }
       });
     </script>
   </head>
+
   <body>
-    
-    <div id="ui-overlay">
-      <div class="instruction-box" id="status-text">
-        Point camera at the <b>Demo Card</b>
-      </div>
-      <div class="controls">
-        <button id="lock-button" disabled>🔒 Lock</button>
-        <button id="reset-button">Reset</button>
-      </div>
+    <!-- HTML UI Overlay -->
+    <div id="overlay">
+      <button id="place-button">Lock to View</button>
     </div>
 
-    <!-- Scene Setup -->
+    <!-- 
+      MindAR Scene Config
+      imageTargetSrc: URL to your compiled .mind file.
+      filterMinCF: Smoothing filter (higher = smoother but more lag)
+    -->
     <a-scene 
       mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; filterMinCF:0.0001; filterBeta: 0.001;" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
-      device-orientation-permission-ui="enabled: false"
-      gesture-detector>
-      
+      device-orientation-permission-ui="enabled: false">
+
       <a-assets>
-        <a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf"></a-asset-item>
+        <img id="boxTexture" src="https://cdn.aframe.io/360-image-gallery-boilerplate/img/cubes.jpg">
       </a-assets>
 
+      <!-- Camera must not have look-controls enabled by default for Image Tracking -->
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <a-entity id="target-entity" mindar-image-target="targetIndex: 0">
-        
-        <!-- Content Wrapper -->
-        <a-entity id="ar-content" gesture-handler>
-          <a-plane color="blue" opacity="0.5" position="0 0 0" height="0.552" width="1" rotation="0 0 0"></a-plane>
-          <a-gltf-model 
-            rotation="0 0 0" 
+      <!-- 
+        Image Target
+        targetIndex: 0 corresponds to the first image in the .mind file
+      -->
+      <a-entity 
+        mindar-image-target="targetIndex: 0"
+        world-transfer="target: #slam-object; button: #place-button">
+
+        <!-- The Content -->
+        <a-entity id="slam-object">
+          <a-box 
             position="0 0 0.1" 
-            scale="0.005 0.005 0.005" 
-            src="#avatarModel" 
-            animation="property: position; to: 0 0.1 0.1; dur: 1000; easing: easeInOutQuad; loop: true; dir: alternate">
-          </a-gltf-model>
+            scale="0.5 0.5 0.5"
+            material="src: #boxTexture; color: #ff5e5e"
+            animation="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear">
+          </a-box>
+          <!-- Plane to visualize "ground" relative to card -->
+          <a-plane 
+            position="0 0 0"
+            rotation="0 0 0" 
+            width="1.5" height="1.5" 
+            material="shader: flat; color: #333; opacity: 0.5; transparent: true">
+          </a-plane>
         </a-entity>
 
       </a-entity>
+
     </a-scene>
-
-    <script>
-      const targetEntity = document.querySelector('#target-entity');
-      const arContent = document.querySelector('#ar-content');
-      const lockButton = document.querySelector('#lock-button');
-      const resetButton = document.querySelector('#reset-button');
-      const statusText = document.querySelector('#status-text');
-      const scene = document.querySelector('a-scene');
-      const camera = document.querySelector('a-camera');
-      
-      let isLocked = false;
-      let isTargetVisible = false;
-
-      // Initial State
-      const initialScale = { x: 1, y: 1, z: 1 };
-      const initialRotation = { x: 0, y: 0, z: 0 };
-
-      // Events
-      targetEntity.addEventListener("targetFound", event => {
-        if(isLocked) return;
-        isTargetVisible = true;
-        lockButton.disabled = false;
-        lockButton.classList.add('active');
-        statusText.innerText = "Target Found! Ready to Lock.";
-      });
-
-      targetEntity.addEventListener("targetLost", event => {
-        if(isLocked) return;
-        isTargetVisible = false;
-        lockButton.disabled = true;
-        lockButton.classList.remove('active');
-        statusText.innerText = "Target Lost. Point at card.";
-      });
-
-      // Lock Mechanism
-      lockButton.addEventListener('click', () => {
-        if (!isTargetVisible || isLocked) return;
-
-        // 1. Calculate World Transforms
-        const worldPos = new THREE.Vector3();
-        const worldQuat = new THREE.Quaternion();
-        const worldScale = new THREE.Vector3();
-
-        arContent.object3D.getWorldPosition(worldPos);
-        arContent.object3D.getWorldQuaternion(worldQuat);
-        arContent.object3D.getWorldScale(worldScale);
-
-        // 2. Detach and Reattach to Scene
-        scene.object3D.add(arContent.object3D);
-        arContent.object3D.position.copy(worldPos);
-        arContent.object3D.quaternion.copy(worldQuat);
-        arContent.object3D.scale.copy(worldScale);
-
-        // 3. Enable 3DOF Look Controls
-        camera.setAttribute('look-controls', 'enabled: true');
-
-        // 4. Update UI
-        isLocked = true;
-        lockButton.innerText = "Locked";
-        lockButton.style.backgroundColor = "#4CAF50";
-        statusText.innerHTML = "<b>Locked (3DoF Mode)</b><br>1 Finger: Rotate | 2 Fingers: Scale";
-        
-        targetEntity.removeAttribute('mindar-image-target');
-      });
-
-      // Reset Mechanism
-      resetButton.addEventListener('click', () => {
-        // Reload page to reset completely is the safest for WebAR stability
-        location.reload(); 
-      });
-    </script>
   </body>
 </html>
