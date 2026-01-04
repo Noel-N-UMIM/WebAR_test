@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebAR Simple Prototype</title>
+    <!-- 1. Load A-Frame (The 3D Engine) -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <!-- 2. Load MindAR (The AR Engine) -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+      /* Optional: Basic UI overlay to guide the user */
+      #ui-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        display: flex;
+        justify-content: center;
+        align-items: flex-end;
+        z-index: 100;
+      }
+      .instruction-box {
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        padding: 15px;
+        margin-bottom: 30px;
+        border-radius: 8px;
+        font-family: sans-serif;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- UI Overlay -->
+    <div id="ui-overlay">
+      <div class="instruction-box">
+        Point camera at the <b>Demo Card</b> image.<br>
+        (Ensure lighting is good)
+      </div>
+    </div>
+
+    <!-- 
+      3. The A-Frame Scene 
+      mindar-image: specifices the target "mind" file. 
+      This example uses a public demo file hosted on CDN.
+    -->
+    <a-scene 
+      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind;" 
+      color-space="sRGB" 
+      renderer="colorManagement: true, physicallyCorrectLights" 
+      vr-mode-ui="enabled: false" 
+      device-orientation-permission-ui="enabled: false">
+      
+      <!-- Assets Management (Pre-loading models) -->
+      <a-assets>
+        <a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf"></a-asset-item>
+      </a-assets>
+
+      <!-- The Camera -->
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <!-- 
+        4. The AR Target
+        targetIndex: 0 refers to the first image in the .mind file.
+      -->
+      <a-entity mindar-image-target="targetIndex: 0">
+        
+        <!-- Element 1: A semi-transparent blue plane to highlight the card -->
+        <a-plane color="blue" opacity="0.5" position="0 0 0" height="0.552" width="1" rotation="0 0 0"></a-plane>
+        
+        <!-- Element 2: The 3D GLTF Model -->
+        <a-gltf-model 
+          rotation="0 0 0" 
+          position="0 0 0.1" 
+          scale="0.005 0.005 0.005" 
+          src="#avatarModel" 
+          animation="property: position; to: 0 0.1 0.1; dur: 1000; easing: easeInOutQuad; loop: true; dir: alternate">
+        </a-gltf-model>
+
+      </a-entity>
+    </a-scene>
+  </body>
+</html>
