@@ -2,228 +2,76 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>WebXR Self-Hosted SLAM</title>
+    <title>Universal WebAR (Model Viewer)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    
-    <!-- UI Styles -->
+
+    <!-- 1. Import Google's <model-viewer> component -->
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+
     <style>
-      body { margin: 0; font-family: sans-serif; background-color: transparent; }
-      #overlay {
-        position: absolute;
-        bottom: 30px;
-        left: 0;
-        width: 100%;
-        text-align: center;
-        z-index: 10;
-        pointer-events: none;
-        display: none; /* Hidden until AR starts */
+      /* Make the viewer fill the screen */
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: #f0f0f0;
       }
       
-      #ar-instructions {
-        font-size: 16px;
-        color: white;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-        margin-bottom: 20px;
+      model-viewer {
+        width: 100%;
+        height: 100%;
       }
 
-      /* WebXR DOM Overlay requires the element to be visible */
-      body.a-fullscreen #overlay {
-        display: block;
-      }
-
-      /* Style for the support warning */
-      #support-warning {
+      /* Custom style for the AR button */
+      .ar-button {
+        background-color: white;
+        border-radius: 4px;
+        border: none;
         position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: rgba(0, 0, 0, 0.85);
-        color: white;
-        padding: 20px;
-        border-radius: 12px;
-        text-align: center;
-        display: none; /* Hidden by default */
-        z-index: 9999;
-        width: 80%;
-        max-width: 400px;
+        bottom: 16px;
+        right: 16px;
+        width: auto;
+        padding: 12px 24px;
+        font-family: Roboto, sans-serif;
+        font-size: 14px;
+        color: #4285f4;
+        box-shadow: 0px 2px 4px rgba(0,0,0,0.25);
+        cursor: pointer;
+        font-weight: bold;
       }
-      #support-warning h3 { margin-top: 0; color: #ff6b6b; }
-      #support-warning a { color: #4dabf7; text-decoration: none; font-weight: bold; }
     </style>
-
-    <!-- A-Frame 1.4.0+ is required for WebXR AR Module -->
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    <script src="https://unpkg.com/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
-
-    <script>
-      /**
-       * Check for WebXR Support on Load
-       */
-      window.addEventListener('load', () => {
-        // Check if navigator.xr exists (WebXR API)
-        // Note: isSessionSupported is async, but simple existence check catches most Safari cases
-        if (!navigator.xr) {
-          document.getElementById('support-warning').style.display = 'block';
-        } else {
-          // Double check specifically for immersive-ar support
-          navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-            if (!supported) {
-               document.getElementById('support-warning').style.display = 'block';
-            }
-          });
-        }
-      });
-
-      /**
-       * Component: ar-shadows
-       * Creates a shadow-only plane that updates nicely in AR
-       */
-      AFRAME.registerComponent('ar-shadows', {
-        schema: { opacity: {default: 0.3} },
-        init: function () {
-          this.el.sceneEl.addEventListener('enter-vr', (ev) => {
-            this.wasVisible = this.el.getAttribute('visible');
-            if (this.el.sceneEl.is('ar-mode')) {
-              this.el.setAttribute('visible', true);
-            }
-          });
-          this.el.sceneEl.addEventListener('exit-vr', (ev) => {
-            if (this.wasVisible) this.el.setAttribute('visible', this.wasVisible);
-          });
-        }
-      });
-
-      /**
-       * Component: reticle-listener
-       * Handles the logic for the "Hit Test" reticle.
-       * When the user taps the screen while the reticle is visible, 
-       * we spawn/move the object to that location.
-       */
-      AFRAME.registerComponent('reticle-listener', {
-        init: function () {
-          const reticle = this.el;
-          // We query this inside the event or ensure element order prevents null
-          const objectToPlace = document.getElementById('slam-object');
-          const scene = this.el.sceneEl;
-
-          // Listen for taps (select event in WebXR)
-          scene.addEventListener('click', (e) => {
-            if (!objectToPlace) return;
-
-            // Only place if the reticle is currently visible (tracking a surface)
-            if (reticle.getAttribute('visible')) {
-              
-              // Move object to reticle position
-              objectToPlace.setAttribute('position', reticle.getAttribute('position'));
-              objectToPlace.setAttribute('rotation', reticle.getAttribute('rotation'));
-              objectToPlace.setAttribute('visible', 'true');
-
-              // Play a small spawn animation
-              objectToPlace.removeAttribute('animation');
-              objectToPlace.setAttribute('scale', '0 0 0');
-              objectToPlace.setAttribute('animation', {
-                property: 'scale',
-                to: '0.5 0.5 0.5',
-                dur: 500,
-                easing: 'easeOutElastic'
-              });
-            }
-          });
-        }
-      });
-    </script>
   </head>
-
   <body>
-    <!-- Support Warning (Shown if WebXR is missing) -->
-    <div id="support-warning">
-      <h3>WebXR Not Supported</h3>
-      <p>This browser does not support WebXR AR (SLAM).</p>
-      <hr style="border-color: #555; opacity: 0.5;">
-      <p style="text-align: left; font-size: 0.9em;">
-        <b>🤖 Android:</b> Use Chrome.<br><br>
-        <b>🍎 iOS:</b> Safari does not support this. You must download the 
-        <a href="https://apps.apple.com/us/app/webxr-viewer/id1295996856" target="_blank">WebXR Viewer App</a>.
-      </p>
-    </div>
-
-    <!-- DOM Overlay for UI -->
-    <div id="overlay">
-      <div id="ar-instructions">Find a flat surface and tap to place the object</div>
-    </div>
 
     <!-- 
-      WebXR Scene Config
-      
-      UPDATES:
-      1. vr-mode-ui="enabled: false": Disables the VR goggles button to force AR mode.
-      2. requiredFeatures: hit-test: Ensures the session is strictly AR with surface detection.
-      3. Removed texture assets to prevent loading errors (black objects).
+      2. The Model Viewer Component 
+      src: The GLB file for Android/Web.
+      ios-src: The USDZ file specifically for iOS Quick Look.
+      ar: Enables AR mode.
+      ar-modes: Defines the priority (WebXR -> SceneViewer -> Quick Look).
     -->
-    <a-scene 
-      webxr="optionalFeatures: dom-overlay; overlayElement: #overlay; requiredFeatures: hit-test"
-      vr-mode-ui="enabled: false"
-      ar-mode-ui="enabled: true"
-      renderer="colorManagement: true; physicallyCorrectLights: true; antialias: true"
-      cursor="rayOrigin: mouse"
-      raycaster="objects: .collidable">
+    <model-viewer 
+      src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+      ios-src="https://modelviewer.dev/shared-assets/models/Astronaut.usdz"
+      poster="https://modelviewer.dev/shared-assets/models/Astronaut.webp"
+      alt="A 3D model of an astronaut"
+      shadow-intensity="1"
+      camera-controls
+      auto-rotate
+      ar
+      ar-modes="webxr scene-viewer quick-look">
 
-      <a-light type="directional" intensity="1" position="-1 2 4"></a-light>
-      <a-light type="ambient" intensity="0.5"></a-light>
+      <!-- Custom AR Button (Optional) -->
+      <button slot="ar-button" class="ar-button">
+        👋 View in your space
+      </button>
 
-      <!-- 
-        1. The SLAM Object
-        Uses a simple color (#7B68EE) instead of a texture image to avoid black silhouette issues.
-      -->
-      <a-entity id="slam-object" visible="false">
-        <a-box 
-          position="0 0.25 0" 
-          scale="0.5 0.5 0.5"
-          color="#7B68EE"
-          animation="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear">
-        </a-box>
-        
-        <!-- Shadow Plane -->
-        <a-plane 
-          rotation="-90 0 0" 
-          width="1.5" height="1.5" 
-          material="shader: shadow; opacity: 0.4"
-          ar-shadows>
-        </a-plane>
-      </a-entity>
+      <!-- Loading Indicator -->
+      <div id="lazy-load-poster" slot="poster"></div>
+      <div id="button-load" slot="poster-dismiss"></div>
 
-      <!-- 
-        2. AR Hit Test Reticle 
-        Uses a built-in <a-ring> geometry instead of an external image.
-        This ensures it is always visible even if internet assets fail.
-      -->
-      <a-entity 
-        ar-hit-test="target: #slam-object; type: map"
-        reticle-listener>
-        
-        <!-- Visual Reticle: A simple white ring -->
-        <a-ring 
-          rotation="-90 0 0" 
-          radius-inner="0.1" 
-          radius-outer="0.12" 
-          color="white" 
-          opacity="0.8"
-          shader="flat">
-        </a-ring>
-        
-        <!-- Inner dot -->
-        <a-circle 
-          rotation="-90 0 0" 
-          radius="0.02" 
-          color="white" 
-          opacity="0.8"
-          shader="flat">
-        </a-circle>
-      </a-entity>
+    </model-viewer>
 
-      <!-- Camera -->
-      <a-camera position="0 1.6 0"></a-camera>
-
-    </a-scene>
   </body>
 </html>
