@@ -58,12 +58,12 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.6);
+        background: rgba(0, 0, 0, 0.8);
         display: flex;
         justify-content: center;
         align-items: center;
         z-index: 20;
-        pointer-events: none;
+        pointer-events: auto; /* Allow clicking the link */
       }
 
       .scan-message {
@@ -75,6 +75,16 @@
         padding: 20px;
         border-radius: 10px;
         background: rgba(0,0,0,0.5);
+        max-width: 80%;
+      }
+
+      .target-link {
+        display: inline-block;
+        margin-top: 15px;
+        color: #4dc3ff;
+        text-decoration: underline;
+        font-size: 16px;
+        cursor: pointer;
       }
 
       #loading-text {
@@ -183,8 +193,12 @@
     <div id="scanning-overlay">
       <div class="scan-message">
         <span id="loading-text">Loading AR Engine...<br></span>
-        📡 Point camera at the "Raccoon" Image<br>
-        <span style="font-size:12px; font-weight:normal">(This is your Set)</span>
+        📡 Point camera at the Target Image<br>
+        
+        <!-- LINK TO THE IMAGE -->
+        <a href="https://hiukim.github.io/mind-ar-js-doc/assets/images/raccoon-2ef571baece2ee4724d0d19edf3de791.png" target="_blank" class="target-link">
+          Click here to open the Raccoon Image
+        </a>
       </div>
     </div>
 
@@ -199,7 +213,7 @@
 
     <!-- 
       MindAR Scene 
-      - uiLoading: no; uiScanning: no -> We hide default MindAR UI to use our own.
+      imageTargetSrc: Points to the compiled .mind file (required for tracking logic)
     -->
     <a-scene 
       mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/band/band.mind; maxTrack: 1; filterMinCF:0.0001; filterBeta: 0.001; uiLoading: no; uiScanning: no" 
