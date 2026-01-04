@@ -27,19 +27,27 @@
       /* Custom style for the AR button */
       .ar-button {
         background-color: white;
-        border-radius: 4px;
+        border-radius: 28px; /* Rounded pill shape */
         border: none;
         position: absolute;
-        bottom: 30px; /* Moved up to avoid Safari toolbars */
-        right: 16px;
+        bottom: 60px; /* Raised higher to avoid iOS bottom bar */
+        left: 50%;
+        transform: translateX(-50%); /* Center horizontally */
         width: auto;
         padding: 12px 24px;
-        font-size: 14px;
+        font-size: 16px;
         color: #4285f4;
-        box-shadow: 0px 2px 4px rgba(0,0,0,0.25);
+        box-shadow: 0px 4px 8px rgba(0,0,0,0.25);
         cursor: pointer;
         font-weight: bold;
-        z-index: 10;
+        z-index: 100; /* Ensure it is on top of everything */
+        white-space: nowrap;
+        display: none; /* Default to hidden, model-viewer will show it when ready */
+      }
+
+      /* When model-viewer enables the button, we want it to be block/flex */
+      model-viewer > .ar-button[slot="ar-button"] {
+        display: inline-block;
       }
 
       /* Instructions Overlay */
@@ -95,6 +103,7 @@
       ar-placement="floor">
 
       <!-- Custom AR Button (Optional) -->
+      <!-- Note: This button is hidden by default and only shown by model-viewer if AR is supported on the device -->
       <button slot="ar-button" class="ar-button">
         👋 View in your space
       </button>
