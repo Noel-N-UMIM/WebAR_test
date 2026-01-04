@@ -30,6 +30,25 @@
       body.a-fullscreen #overlay {
         display: block;
       }
+
+      /* Style for the support warning */
+      #support-warning {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.85);
+        color: white;
+        padding: 20px;
+        border-radius: 12px;
+        text-align: center;
+        display: none; /* Hidden by default */
+        z-index: 9999;
+        width: 80%;
+        max-width: 400px;
+      }
+      #support-warning h3 { margin-top: 0; color: #ff6b6b; }
+      #support-warning a { color: #4dabf7; text-decoration: none; font-weight: bold; }
     </style>
 
     <!-- A-Frame 1.4.0+ is required for WebXR AR Module -->
@@ -37,6 +56,24 @@
     <script src="https://unpkg.com/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
 
     <script>
+      /**
+       * Check for WebXR Support on Load
+       */
+      window.addEventListener('load', () => {
+        // Check if navigator.xr exists (WebXR API)
+        // Note: isSessionSupported is async, but simple existence check catches most Safari cases
+        if (!navigator.xr) {
+          document.getElementById('support-warning').style.display = 'block';
+        } else {
+          // Double check specifically for immersive-ar support
+          navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+            if (!supported) {
+               document.getElementById('support-warning').style.display = 'block';
+            }
+          });
+        }
+      });
+
       /**
        * Component: ar-shadows
        * Creates a shadow-only plane that updates nicely in AR
@@ -98,6 +135,18 @@
   </head>
 
   <body>
+    <!-- Support Warning (Shown if WebXR is missing) -->
+    <div id="support-warning">
+      <h3>WebXR Not Supported</h3>
+      <p>This browser does not support WebXR AR (SLAM).</p>
+      <hr style="border-color: #555; opacity: 0.5;">
+      <p style="text-align: left; font-size: 0.9em;">
+        <b>🤖 Android:</b> Use Chrome.<br><br>
+        <b>🍎 iOS:</b> Safari does not support this. You must download the 
+        <a href="https://apps.apple.com/us/app/webxr-viewer/id1295996856" target="_blank">WebXR Viewer App</a>.
+      </p>
+    </div>
+
     <!-- DOM Overlay for UI -->
     <div id="overlay">
       <div id="ar-instructions">Find a flat surface and tap to place the object</div>
