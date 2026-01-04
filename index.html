@@ -29,23 +29,22 @@
         padding: 15px 25px;
         border-radius: 30px;
         display: inline-block;
-        max-width: 80%;
+        max-width: 90%;
       }
 
       h1 { margin: 0 0 5px 0; font-size: 18px; color: #4dc3ff; }
       p { margin: 0; font-size: 14px; color: #ddd; }
-
-      /* Visual feedback for connection */
-      #connection-line {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 0;
-        height: 2px;
-        background: lime;
-        transform-origin: top left;
-        display: none;
+      
+      /* Debug Indicators */
+      .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: red;
+        margin-right: 5px;
       }
+      .active { background-color: lime; }
     </style>
 
     <script>
@@ -63,17 +62,31 @@
           this.charObj = document.querySelector('#character-ball');
           
           this.isLinked = false;
+          
+          // Debug UI references
+          this.racoonDot = document.querySelector('#dot-raccoon');
+          this.bearDot = document.querySelector('#dot-bear');
+          
+          // Add listeners for individual tracking events to update UI
+          this.baseMarker.addEventListener('targetFound', () => {
+            this.racoonDot.classList.add('active');
+          });
+          this.baseMarker.addEventListener('targetLost', () => {
+            this.racoonDot.classList.remove('active');
+          });
+          
+          this.charMarker.addEventListener('targetFound', () => {
+            this.bearDot.classList.add('active');
+          });
+          this.charMarker.addEventListener('targetLost', () => {
+            this.bearDot.classList.remove('active');
+          });
         },
 
         tick: function() {
           if (!this.baseMarker || !this.charMarker) return;
 
-          // 1. Check if both markers are currently visible
-          const baseVisible = !this.baseMarker.getAttribute('mindar-image-target').hidden; // Note: MindAR logic is inverted or property based, usually check object3D.visible
-          const charVisible = !this.charMarker.getAttribute('mindar-image-target').hidden;
-          
-          // MindAR 1.2.5 specific visibility check relies on the event listeners usually, 
-          // but checking object3D.visible is reliable in the scene graph.
+          // Check visibility using object3D properties (reliable in A-Frame loop)
           const isBaseVisible = this.baseMarker.object3D.visible;
           const isCharVisible = this.charMarker.object3D.visible;
 
@@ -89,10 +102,13 @@
             // 3. Calculate Distance
             const distance = basePos.distanceTo(charPos);
 
-            // 4. Logic: If close enough (e.g., 0.5 units), trigger jump
-            if (distance < 0.6 && !this.isLinked) {
+            // 4. Logic: INCREASED THRESHOLD
+            // 1.0 unit = width of one image. 
+            // Side-by-side images are exactly 1.0 unit apart (center to center).
+            // We set threshold to 1.25 to trigger when they are just touching or slightly apart.
+            if (distance < 1.25 && !this.isLinked) {
               this.linkObjects();
-            } else if (distance >= 0.6 && this.isLinked) {
+            } else if (distance >= 1.25 && this.isLinked) {
               this.unlinkObjects();
             }
 
@@ -109,17 +125,16 @@
           this.charObj.setAttribute('material', 'color', '#00ff00');
           this.baseObj.setAttribute('material', 'color', '#00ff00');
 
-          // Action: Jump Animation (Scale up/down to simulate excitement)
+          // Action: Jump Animation
           this.charObj.setAttribute('animation', {
             property: 'position',
-            to: '0 1 0', // Jump up relative to marker
+            to: '0 1 0', 
             dur: 300,
             easing: 'easeOutQuad',
             loop: 2,
             dir: 'alternate'
           });
           
-          // Show text
           document.querySelector('#status-text').textContent = "Linked! Markers Connected.";
         },
 
@@ -145,8 +160,12 @@
     <div id="overlay">
       <div class="instruction-box">
         <h1>Multi-Marker Demo</h1>
-        <p id="status-text">Scan "Raccoon" and "Bear" images simultaneously.</p>
-        <p style="font-size: 11px; margin-top:5px; color:#aaa;">(Need the images? Check the chat)</p>
+        <p>
+          <span id="dot-raccoon" class="status-indicator"></span> Raccoon 
+          <span style="margin: 0 10px;">|</span> 
+          <span id="dot-bear" class="status-indicator"></span> Bear
+        </p>
+        <p id="status-text" style="margin-top: 10px; font-weight: bold;">Scan both images...</p>
       </div>
     </div>
 
