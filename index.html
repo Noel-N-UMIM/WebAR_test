@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Multi-Marker Interaction (MindAR)</title>
+    <title>Interactive AR Story (MindAR)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
     <!-- 1. Libraries: A-Frame and MindAR -->
@@ -12,215 +12,218 @@
     <style>
       body { margin: 0; overflow: hidden; font-family: sans-serif; }
       
-      /* UI Overlay */
-      #overlay {
+      /* UI: Main HUD (Story Controls) */
+      #story-ui {
         position: absolute;
-        top: 20px;
+        bottom: 30px;
         left: 0;
         width: 100%;
         text-align: center;
         z-index: 10;
+        display: none; /* Hidden until target found */
         pointer-events: none;
       }
-      
-      .instruction-box {
-        background: rgba(0, 0, 0, 0.7);
-        color: white;
-        padding: 15px 25px;
-        border-radius: 30px;
+
+      .story-box {
+        background: rgba(255, 255, 255, 0.9);
+        padding: 20px;
+        border-radius: 15px;
         display: inline-block;
-        max-width: 90%;
+        max-width: 80%;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        pointer-events: auto;
       }
 
-      h1 { margin: 0 0 5px 0; font-size: 18px; color: #4dc3ff; }
-      p { margin: 0; font-size: 14px; color: #ddd; }
-      
-      /* Debug Indicators */
-      .status-indicator {
-        display: inline-block;
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background-color: red;
-        margin-right: 5px;
+      h2 { margin: 0 0 10px 0; font-size: 20px; color: #333; }
+      p { margin: 0 0 15px 0; font-size: 16px; color: #666; }
+
+      button {
+        background-color: #4285f4;
+        color: white;
+        border: none;
+        padding: 10px 25px;
+        font-size: 16px;
+        border-radius: 25px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: transform 0.1s;
       }
-      .active { background-color: lime; }
+      button:active { transform: scale(0.95); }
+
+      /* UI: Tracking Lost Overlay */
+      #scanning-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 20;
+        pointer-events: none;
+      }
+
+      .scan-message {
+        color: white;
+        font-size: 18px;
+        font-weight: bold;
+        text-align: center;
+        border: 2px solid white;
+        padding: 20px;
+        border-radius: 10px;
+        background: rgba(0,0,0,0.5);
+      }
     </style>
 
     <script>
       /**
-       * Component: multi-marker-logic
-       * Tracks the position of two markers and triggers an event when they are close.
+       * Component: story-controller
+       * Manages the state of the experience.
+       * - Handles Target Found/Lost UI switching.
+       * - Moves character based on user clicks.
        */
-      AFRAME.registerComponent('multi-marker-logic', {
+      AFRAME.registerComponent('story-controller', {
         init: function() {
-          // Get references to our entities
-          this.baseMarker = document.querySelector('#marker-base');     // Raccoon
-          this.charMarker = document.querySelector('#marker-char');     // Bear
+          // UI Elements
+          this.scanningOverlay = document.querySelector('#scanning-overlay');
+          this.storyUI = document.querySelector('#story-ui');
+          this.storyText = document.querySelector('#story-text');
+          this.actionBtn = document.querySelector('#action-btn');
           
-          this.baseObj = document.querySelector('#base-platform');
-          this.charObj = document.querySelector('#character-ball');
+          // Scene Elements
+          this.marker = document.querySelector('#set-marker');
+          this.character = document.querySelector('#character');
           
-          this.isLinked = false;
+          // Story State
+          this.step = 0;
           
-          // Debug UI references
-          this.racoonDot = document.querySelector('#dot-raccoon');
-          this.bearDot = document.querySelector('#dot-bear');
-          
-          // Add listeners for individual tracking events to update UI
-          this.baseMarker.addEventListener('targetFound', () => {
-            this.racoonDot.classList.add('active');
+          // 1. Handle Tracking Events
+          // This ensures the experience feels "smooth" by telling the user what to do
+          // instead of just letting the 3D model disappear silently.
+          this.marker.addEventListener('targetFound', () => {
+            this.scanningOverlay.style.display = 'none';
+            this.storyUI.style.display = 'block';
           });
-          this.baseMarker.addEventListener('targetLost', () => {
-            this.racoonDot.classList.remove('active');
+
+          this.marker.addEventListener('targetLost', () => {
+            this.scanningOverlay.style.display = 'flex';
+            this.storyUI.style.display = 'none';
           });
-          
-          this.charMarker.addEventListener('targetFound', () => {
-            this.bearDot.classList.add('active');
-          });
-          this.charMarker.addEventListener('targetLost', () => {
-            this.bearDot.classList.remove('active');
+
+          // 2. Handle Interaction
+          this.actionBtn.addEventListener('click', () => {
+            this.advanceStory();
           });
         },
 
-        tick: function() {
-          if (!this.baseMarker || !this.charMarker) return;
-
-          // Check visibility using object3D properties (reliable in A-Frame loop)
-          const isBaseVisible = this.baseMarker.object3D.visible;
-          const isCharVisible = this.charMarker.object3D.visible;
-
-          if (isBaseVisible && isCharVisible) {
+        advanceStory: function() {
+          this.step++;
+          
+          // Simple State Machine
+          if (this.step === 1) {
+            // Action: Jump to the left
+            this.storyText.innerText = "The Explorer inspects the strange ruin...";
+            this.actionBtn.innerText = "Check the top";
             
-            // 2. Get World Positions
-            const basePos = new THREE.Vector3();
-            const charPos = new THREE.Vector3();
+            this.character.removeAttribute('animation');
+            this.character.setAttribute('animation', {
+              property: 'position',
+              to: '-0.3 0 0',
+              dur: 1000,
+              easing: 'easeInOutQuad'
+            });
             
-            this.baseMarker.object3D.getWorldPosition(basePos);
-            this.charMarker.object3D.getWorldPosition(charPos);
-
-            // 3. Calculate Distance
-            const distance = basePos.distanceTo(charPos);
-
-            // 4. Logic: INCREASED THRESHOLD
-            // 1.0 unit = width of one image. 
-            // Side-by-side images are exactly 1.0 unit apart (center to center).
-            // We set threshold to 1.25 to trigger when they are just touching or slightly apart.
-            if (distance < 1.25 && !this.isLinked) {
-              this.linkObjects();
-            } else if (distance >= 1.25 && this.isLinked) {
-              this.unlinkObjects();
-            }
+          } else if (this.step === 2) {
+            // Action: Jump up top
+            this.storyText.innerText = "He found a secret switch!";
+            this.actionBtn.innerText = "Finish";
+            
+            this.character.removeAttribute('animation');
+            this.character.setAttribute('animation', {
+              property: 'position',
+              to: '0 0.25 0', // On top of the cylinder
+              dur: 800,
+              easing: 'easeOutBack'
+            });
+            this.character.setAttribute('material', 'color', '#FFD700'); // Turn Gold
 
           } else {
-            // Reset if tracking is lost
-            if (this.isLinked) this.unlinkObjects();
+            // Reset
+            this.step = 0;
+            this.storyText.innerText = "A wild explorer appears on the set.";
+            this.actionBtn.innerText = "Investigate";
+            
+            this.character.setAttribute('position', '0.4 0 0');
+            this.character.setAttribute('material', 'color', '#4CC3D9');
           }
-        },
-
-        linkObjects: function() {
-          this.isLinked = true;
-          
-          // Visual Feedback: Turn Green
-          this.charObj.setAttribute('material', 'color', '#00ff00');
-          this.baseObj.setAttribute('material', 'color', '#00ff00');
-
-          // Action: Jump Animation
-          this.charObj.setAttribute('animation', {
-            property: 'position',
-            to: '0 1 0', 
-            dur: 300,
-            easing: 'easeOutQuad',
-            loop: 2,
-            dir: 'alternate'
-          });
-          
-          document.querySelector('#status-text').textContent = "Linked! Markers Connected.";
-        },
-
-        unlinkObjects: function() {
-          this.isLinked = false;
-          
-          // Reset Colors
-          this.charObj.setAttribute('material', 'color', '#4CC3D9'); // Blue
-          this.baseObj.setAttribute('material', 'color', '#FF4444'); // Red
-
-          // Reset Position
-          this.charObj.removeAttribute('animation');
-          this.charObj.setAttribute('position', '0 0 0');
-          
-          document.querySelector('#status-text').textContent = "Move images closer together...";
         }
       });
     </script>
   </head>
   <body>
 
-    <!-- UI Overlay -->
-    <div id="overlay">
-      <div class="instruction-box">
-        <h1>Multi-Marker Demo</h1>
-        <p>
-          <span id="dot-raccoon" class="status-indicator"></span> Raccoon 
-          <span style="margin: 0 10px;">|</span> 
-          <span id="dot-bear" class="status-indicator"></span> Bear
-        </p>
-        <p id="status-text" style="margin-top: 10px; font-weight: bold;">Scan both images...</p>
+    <!-- UI: Scanning / Tracking Lost Overlay -->
+    <div id="scanning-overlay">
+      <div class="scan-message">
+        📡 Point camera at the "Raccoon" Image<br>
+        <span style="font-size:12px; font-weight:normal">(This is your Set)</span>
+      </div>
+    </div>
+
+    <!-- UI: Story Controls (Visible only when tracking) -->
+    <div id="story-ui">
+      <div class="story-box">
+        <h2 id="story-title">Chapter 1</h2>
+        <p id="story-text">A wild explorer appears on the set.</p>
+        <button id="action-btn">Investigate</button>
       </div>
     </div>
 
     <!-- 
       MindAR Scene 
-      imageTargetSrc: The compiled .mind file containing both Raccoon and Bear.
-      maxTrack: 2 (Crucial! Allows tracking 2 images at once)
+      Note: We only need maxTrack: 1 for a single "Set" object.
     -->
     <a-scene 
-      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/band/band.mind; maxTrack: 2" 
+      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/band/band.mind; maxTrack: 1; filterMinCF:0.0001; filterBeta: 0.001" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
-      device-orientation-permission-ui="enabled: false"
-      multi-marker-logic>
+      device-orientation-permission-ui="enabled: false">
 
       <a-assets>
-        <!-- No external models, using primitives for stability -->
+        <!-- Preload any assets here -->
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
       <!-- 
-        Marker 1: The "Base" (Index 0 = Raccoon) 
-        Shows a Red Platform
+        THE SET ANCHOR (Raccoon Marker)
+        All AR content is inside here. 
+        (0,0,0) is the center of the image.
       -->
-      <a-entity id="marker-base" mindar-image-target="targetIndex: 0">
+      <a-entity id="set-marker" mindar-image-target="targetIndex: 0" story-controller>
+        
+        <!-- The "Set" Geometry (Red Platform) -->
         <a-cylinder 
-          id="base-platform"
           position="0 0 0" 
           height="0.1" 
-          radius="0.5" 
+          radius="0.4" 
           color="#FF4444" 
-          opacity="0.8">
+          opacity="0.9">
         </a-cylinder>
         
-        <!-- Text Label -->
-        <a-text value="Base" position="0 0.5 0" align="center" color="white" scale="0.5 0.5 0.5"></a-text>
-      </a-entity>
-
-      <!-- 
-        Marker 2: The "Character" (Index 1 = Bear)
-        Shows a Blue Sphere
-      -->
-      <a-entity id="marker-char" mindar-image-target="targetIndex: 1">
+        <!-- The "Character" (Blue Sphere) -->
+        <!-- Starting Point: Offset to the right (x=0.4) -->
         <a-sphere 
-          id="character-ball"
-          position="0 0 0" 
-          radius="0.3" 
+          id="character"
+          position="0.4 0 0" 
+          radius="0.1" 
           color="#4CC3D9"
-          animation="property: scale; to: 1.1 1.1 1.1; dir: alternate; loop: true; dur: 1000">
+          shadow>
         </a-sphere>
-        
-        <!-- Text Label -->
-        <a-text value="Character" position="0 0.5 0" align="center" color="white" scale="0.5 0.5 0.5"></a-text>
+
       </a-entity>
 
     </a-scene>
