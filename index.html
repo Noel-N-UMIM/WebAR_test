@@ -2,89 +2,147 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>WebAR Simple Prototype</title>
-    <!-- 1. Load A-Frame (The 3D Engine) -->
+    <title>WebAR Stabilized Tool</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <!-- 2. Load MindAR (The AR Engine) -->
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     
     <style>
-      body {
-        margin: 0;
-        overflow: hidden;
-      }
-      /* Optional: Basic UI overlay to guide the user */
+      body { margin: 0; overflow: hidden; }
       #ui-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
         pointer-events: none;
-        display: flex;
-        justify-content: center;
-        align-items: flex-end;
+        display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
         z-index: 100;
       }
       .instruction-box {
-        background: rgba(0, 0, 0, 0.6);
-        color: white;
-        padding: 15px;
-        margin-bottom: 30px;
-        border-radius: 8px;
-        font-family: sans-serif;
-        text-align: center;
+        background: rgba(0, 0, 0, 0.6); color: white; padding: 10px 20px;
+        margin-bottom: 10px; border-radius: 8px; font-family: sans-serif; text-align: center;
       }
+      /* New Lock Button */
+      #lock-button {
+        background-color: #ff4081; color: white; border: none;
+        padding: 12px 24px; border-radius: 30px; font-size: 16px; font-weight: bold;
+        margin-bottom: 40px; pointer-events: auto; cursor: pointer;
+        opacity: 0.5; /* Disabled appearance initially */
+        transition: opacity 0.3s;
+      }
+      #lock-button.active { opacity: 1; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
     </style>
   </head>
   <body>
+    
     <!-- UI Overlay -->
     <div id="ui-overlay">
-      <div class="instruction-box">
-        Point camera at the <b>Demo Card</b> image.<br>
-        (Ensure lighting is good)
+      <div class="instruction-box" id="status-text">
+        Point camera at the <b>Demo Card</b>
       </div>
+      <button id="lock-button" disabled>🔒 Lock Position</button>
     </div>
 
     <!-- 
-      3. The A-Frame Scene 
-      mindar-image: specifices the target "mind" file. 
-      This example uses a public demo file hosted on CDN.
+      Scene Configuration
+      1. filterMinCF: 0.0001 -> Reduces jitter (smooths heavily).
+      2. filterBeta: 0.001 -> Reduces lag overshoot.
     -->
     <a-scene 
-      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind;" 
+      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; filterMinCF:0.0001; filterBeta: 0.001;" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
       device-orientation-permission-ui="enabled: false">
       
-      <!-- Assets Management (Pre-loading models) -->
       <a-assets>
         <a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf"></a-asset-item>
       </a-assets>
 
-      <!-- The Camera -->
+      <!-- Camera: look-controls disabled initially (MindAR controls it) -->
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- 
-        4. The AR Target
-        targetIndex: 0 refers to the first image in the .mind file.
-      -->
-      <a-entity mindar-image-target="targetIndex: 0">
+      <!-- Target Entity -->
+      <a-entity id="target-entity" mindar-image-target="targetIndex: 0">
         
-        <!-- Element 1: A semi-transparent blue plane to highlight the card -->
-        <a-plane color="blue" opacity="0.5" position="0 0 0" height="0.552" width="1" rotation="0 0 0"></a-plane>
-        
-        <!-- Element 2: The 3D GLTF Model -->
-        <a-gltf-model 
-          rotation="0 0 0" 
-          position="0 0 0.1" 
-          scale="0.005 0.005 0.005" 
-          src="#avatarModel" 
-          animation="property: position; to: 0 0.1 0.1; dur: 1000; easing: easeInOutQuad; loop: true; dir: alternate">
-        </a-gltf-model>
+        <!-- Wrapper for content: easier to detach/move as a group -->
+        <a-entity id="ar-content">
+          <a-plane color="blue" opacity="0.5" position="0 0 0" height="0.552" width="1" rotation="0 0 0"></a-plane>
+          <a-gltf-model 
+            rotation="0 0 0" 
+            position="0 0 0.1" 
+            scale="0.005 0.005 0.005" 
+            src="#avatarModel" 
+            animation="property: position; to: 0 0.1 0.1; dur: 1000; easing: easeInOutQuad; loop: true; dir: alternate">
+          </a-gltf-model>
+        </a-entity>
 
       </a-entity>
     </a-scene>
+
+    <script>
+      const targetEntity = document.querySelector('#target-entity');
+      const arContent = document.querySelector('#ar-content');
+      const lockButton = document.querySelector('#lock-button');
+      const statusText = document.querySelector('#status-text');
+      const scene = document.querySelector('a-scene');
+      const camera = document.querySelector('a-camera');
+      
+      let isLocked = false;
+      let isTargetVisible = false;
+
+      // 1. Detect when target is found to enable the Lock button
+      targetEntity.addEventListener("targetFound", event => {
+        if(isLocked) return; // Ignore if already locked
+        isTargetVisible = true;
+        lockButton.disabled = false;
+        lockButton.classList.add('active');
+        statusText.innerText = "Target Found! Ready to Lock.";
+      });
+
+      targetEntity.addEventListener("targetLost", event => {
+        if(isLocked) return; // Ignore if already locked
+        isTargetVisible = false;
+        lockButton.disabled = true;
+        lockButton.classList.remove('active');
+        statusText.innerText = "Target Lost. Point at card.";
+      });
+
+      // 2. The Lock Logic
+      lockButton.addEventListener('click', () => {
+        if (!isTargetVisible || isLocked) return;
+
+        // A. Calculate current World Position/Rotation
+        // We must grab the world transforms before detaching
+        const worldPos = new THREE.Vector3();
+        const worldQuat = new THREE.Quaternion();
+        const worldScale = new THREE.Vector3();
+
+        arContent.object3D.getWorldPosition(worldPos);
+        arContent.object3D.getWorldQuaternion(worldQuat);
+        arContent.object3D.getWorldScale(worldScale);
+
+        // B. Detach content from the Target and attach to Scene
+        // This stops the content from hiding when target is lost
+        scene.object3D.add(arContent.object3D);
+
+        // C. Apply the saved World Transforms to the new parent
+        arContent.object3D.position.copy(worldPos);
+        arContent.object3D.quaternion.copy(worldQuat);
+        arContent.object3D.scale.copy(worldScale);
+
+        // D. Enable "Look Controls" on Camera
+        // This allows the user to rotate the phone (gyro) to look around the now-stationary object
+        camera.setAttribute('look-controls', 'enabled: true');
+
+        // E. Stop the AR tracking engine to save CPU/Battery
+        // We pause the system, but keep the video feed alive
+        // (Note: In some versions of MindAR, pausing system might freeze video. 
+        // Safer way is just removing the listener logic, but let's try just setting state).
+        isLocked = true;
+        lockButton.innerText = "Position Locked (3DOF)";
+        lockButton.style.backgroundColor = "#4CAF50"; // Green
+        statusText.innerText = "Overlay Locked. You can move freely.";
+        
+        // Disable the target entity logic so it doesn't try to grab it back
+        targetEntity.removeAttribute('mindar-image-target');
+      });
+    </script>
   </body>
 </html>
