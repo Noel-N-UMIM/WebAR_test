@@ -178,8 +178,10 @@
 
     <!-- 
       2. The Model Viewer Component 
-      We removed 'ios-src' logic here in comments but kept it in attributes.
-      added id="viewer" for JS access.
+      UPDATED: ar-modes="scene-viewer webxr quick-look"
+      This prioritizes the native Android 'Scene Viewer' app over WebXR.
+      Scene Viewer guarantees the standard "dots/grid" scanning UI on Android.
+      iOS Quick Look (native) will still be used on iPhones.
     -->
     <model-viewer 
       id="viewer"
@@ -191,7 +193,7 @@
       camera-controls
       auto-rotate
       ar
-      ar-modes="webxr scene-viewer quick-look"
+      ar-modes="scene-viewer webxr quick-look"
       ar-scale="auto"
       ar-placement="floor">
 
