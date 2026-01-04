@@ -77,6 +77,22 @@
         max-width: 80%;
         line-height: 1.5;
       }
+      
+      .steps-container {
+        text-align: left;
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 12px;
+        margin-bottom: 30px;
+        max-width: 280px;
+      }
+      
+      .step {
+        margin-bottom: 10px;
+        color: #555;
+        font-size: 14px;
+      }
+      .step strong { color: #333; }
 
       /* Big Start Button */
       .start-btn {
@@ -144,7 +160,7 @@
         text-shadow: 0 2px 4px rgba(0,0,0,0.8);
         margin-top: 10px;
         font-size: 16px;
-        background-color: rgba(0,0,0,0.4);
+        background-color: rgba(0,0,0,0.6); /* Darker background for readability */
         padding: 8px 16px;
         border-radius: 12px;
       }
@@ -163,7 +179,14 @@
     <!-- Landing Page Overlay -->
     <div id="landing">
       <h1>Astronaut Experience</h1>
-      <p>Place the astronaut in your room to get started.</p>
+      <p>Place the astronaut in your room.</p>
+      
+      <!-- Instructions to prep user -->
+      <div class="steps-container">
+        <div class="step">1. Tap <strong>Start in AR</strong> below.</div>
+        <div class="step">2. Move phone to <strong>scan the floor</strong>.</div>
+        <div class="step">3. <strong>Tap the screen</strong> to place.</div>
+      </div>
       
       <!-- Primary Action: Launch AR -->
       <button class="start-btn" onclick="startExperience()">
@@ -203,9 +226,10 @@
       </button>
 
       <!-- Custom AR Prompt (Scanning UI) -->
+      <!-- Updated text to guide the flow better -->
       <div id="ar-prompt" slot="ar-prompt">
         <img src="https://modelviewer.dev/shared-assets/icons/hand.png">
-        <p>Move device to scan floor</p>
+        <p>Move device to find floor.<br>Tap grid to place.</p>
       </div>
 
       <div id="lazy-load-poster" slot="poster"></div>
