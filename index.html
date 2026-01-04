@@ -16,6 +16,7 @@
         width: 100vw;
         height: 100vh;
         background-color: #f0f0f0;
+        font-family: Roboto, sans-serif;
       }
       
       model-viewer {
@@ -29,20 +30,47 @@
         border-radius: 4px;
         border: none;
         position: absolute;
-        bottom: 16px;
+        bottom: 30px; /* Moved up to avoid Safari toolbars */
         right: 16px;
         width: auto;
         padding: 12px 24px;
-        font-family: Roboto, sans-serif;
         font-size: 14px;
         color: #4285f4;
         box-shadow: 0px 2px 4px rgba(0,0,0,0.25);
         cursor: pointer;
         font-weight: bold;
+        z-index: 10;
+      }
+
+      /* Instructions Overlay */
+      #instructions {
+        position: absolute;
+        top: 20px;
+        left: 0;
+        width: 100%;
+        text-align: center;
+        z-index: 5;
+        pointer-events: none;
+      }
+      
+      .instruction-text {
+        background-color: rgba(255, 255, 255, 0.85);
+        padding: 10px 20px;
+        border-radius: 20px;
+        display: inline-block;
+        font-size: 16px;
+        color: #333;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        font-weight: 500;
       }
     </style>
   </head>
   <body>
+
+    <!-- Visual Hint -->
+    <div id="instructions">
+      <div class="instruction-text">👇 Tap "View in your space" for AR</div>
+    </div>
 
     <!-- 
       2. The Model Viewer Component 
@@ -50,6 +78,8 @@
       ios-src: The USDZ file specifically for iOS Quick Look.
       ar: Enables AR mode.
       ar-modes: Defines the priority (WebXR -> SceneViewer -> Quick Look).
+      ar-scale: Ensures 1:1 scale with real world.
+      ar-placement: floor (default) or wall.
     -->
     <model-viewer 
       src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
@@ -60,7 +90,9 @@
       camera-controls
       auto-rotate
       ar
-      ar-modes="webxr scene-viewer quick-look">
+      ar-modes="webxr scene-viewer quick-look"
+      ar-scale="auto"
+      ar-placement="floor">
 
       <!-- Custom AR Button (Optional) -->
       <button slot="ar-button" class="ar-button">
