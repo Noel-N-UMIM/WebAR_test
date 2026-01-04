@@ -5,8 +5,8 @@
     <title>Interactive AR Story (MindAR)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
-    <!-- 1. Libraries: A-Frame 1.4.2 (Stable for MindAR) and MindAR -->
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <!-- 1. Libraries: Downgraded to A-Frame 1.3.0 (Best compatibility for MindAR) -->
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
     <style>
@@ -99,28 +99,37 @@
       /**
        * Component: story-controller
        * Manages the state of the experience.
-       * - Handles Target Found/Lost UI switching.
-       * - Moves character based on user clicks.
        */
       AFRAME.registerComponent('story-controller', {
         init: function() {
-          // UI Elements
           this.scanningOverlay = document.querySelector('#scanning-overlay');
           this.loadingText = document.querySelector('#loading-text');
           this.storyUI = document.querySelector('#story-ui');
           this.storyText = document.querySelector('#story-text');
           this.actionBtn = document.querySelector('#action-btn');
           
-          // Scene Elements
           this.marker = document.querySelector('#set-marker');
           this.character = document.querySelector('#character');
-          
-          // Story State
           this.step = 0;
           
-          // 0. Handle Scene Loading
-          this.el.sceneEl.addEventListener('arReady', () => {
-             if(this.loadingText) this.loadingText.style.display = 'none';
+          // Debugging
+          console.log("Story Controller Initialized");
+
+          // 0. Handle Scene Loading Events from the scene element
+          const sceneEl = this.el.sceneEl;
+          
+          sceneEl.addEventListener('arReady', () => {
+             console.log("AR Engine Ready");
+             if(this.loadingText) this.loadingText.innerText = "Engine Ready. Scan Image now.";
+             setTimeout(() => {
+                if(this.loadingText) this.loadingText.style.display = 'none';
+             }, 2000);
+          });
+
+          sceneEl.addEventListener('arError', (event) => {
+             console.error("AR Error:", event);
+             if(this.loadingText) this.loadingText.innerText = "Error loading AR file. Check console.";
+             if(this.scanningOverlay) this.scanningOverlay.style.background = "rgba(100,0,0,0.8)";
           });
           
           // 1. Handle Tracking Events
@@ -145,9 +154,7 @@
         advanceStory: function() {
           this.step++;
           
-          // Simple State Machine
           if (this.step === 1) {
-            // Action: Jump to the left
             this.storyText.innerText = "The Explorer inspects the strange ruin...";
             this.actionBtn.innerText = "Check the top";
             
@@ -160,7 +167,6 @@
             });
             
           } else if (this.step === 2) {
-            // Action: Jump up top
             this.storyText.innerText = "He found a secret switch!";
             this.actionBtn.innerText = "Finish";
             
@@ -174,7 +180,6 @@
             this.character.setAttribute('material', 'color', '#FFD700'); // Turn Gold
 
           } else {
-            // Reset
             this.step = 0;
             this.storyText.innerText = "A wild explorer appears on the set.";
             this.actionBtn.innerText = "Investigate";
@@ -192,7 +197,7 @@
     <!-- UI: Scanning / Tracking Lost Overlay -->
     <div id="scanning-overlay">
       <div class="scan-message">
-        <span id="loading-text">Loading AR Engine...<br></span>
+        <span id="loading-text">Downloading AR Data...<br></span>
         📡 Point camera at the Target Image<br>
         
         <!-- LINK TO THE IMAGE -->
@@ -213,7 +218,6 @@
 
     <!-- 
       MindAR Scene 
-      imageTargetSrc: Points to the compiled .mind file (required for tracking logic)
     -->
     <a-scene 
       mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/band/band.mind; maxTrack: 1; filterMinCF:0.0001; filterBeta: 0.001; uiLoading: no; uiScanning: no" 
@@ -230,12 +234,10 @@
 
       <!-- LIGHTING: Essential for visibility -->
       <a-light type="ambient" intensity="1"></a-light>
-      <a-light type="directional" position="0 0 1" intensity="0.5"></a-light>
+      <a-light type="directional" position="0 0 1" intensity="0.8"></a-light>
 
       <!-- 
         THE SET ANCHOR (Raccoon Marker)
-        All AR content is inside here. 
-        (0,0,0) is the center of the image.
       -->
       <a-entity id="set-marker" mindar-image-target="targetIndex: 0" story-controller>
         
@@ -249,7 +251,6 @@
         </a-cylinder>
         
         <!-- The "Character" (Blue Sphere) -->
-        <!-- Starting Point: Offset to the right (x=0.4) -->
         <a-sphere 
           id="character"
           position="0.4 0 0" 
