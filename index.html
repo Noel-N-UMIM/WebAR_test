@@ -2,70 +2,86 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Self-Hosted MindAR (Simple)</title>
+    <title>Universal AR.js (Hiro)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     
-    <!-- 1. A-Frame and MindAR Libraries -->
-    <!-- UPDATED: Downgraded to 1.4.2 for better iOS Safari compatibility -->
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <!-- 1. Libraries: A-Frame 1.2.0 + AR.js -->
+    <!-- This specific combination is known for high stability on iOS Safari -->
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
     <style>
-      /* Ensure video fits correctly on iOS */
-      video {
+      body { margin: 0; overflow: hidden; font-family: sans-serif; }
+      
+      #overlay {
         position: absolute;
         top: 0;
         left: 0;
-        z-index: -2;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10;
+        pointer-events: none;
       }
+
+      .message-box {
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        pointer-events: auto;
+      }
+      
+      a { color: #4dc3ff; font-weight: bold; }
     </style>
   </head>
 
-  <body>
+  <body style="margin: 0; overflow: hidden;">
+    
+    <div id="overlay">
+      <div class="message-box">
+        <p>📡 Point camera at the <b>Hiro Marker</b></p>
+        <p><a href="https://upload.wikimedia.org/wikipedia/commons/4/48/Hiro_marker_ARjs.png" target="_blank">Click to Open Marker Image</a></p>
+      </div>
+    </div>
+
     <!-- 
-      MindAR Scene Config
-      imageTargetSrc: URL to your compiled .mind file.
-      filterMinCF: Smoothing filter (higher = smoother but more lag)
+      AR.js Scene Config 
+      embedded: Essential for mobile css handling
+      arjs: The main component. sourceType: webcam reads the phone camera.
+      vr-mode-ui="enabled: false": Hides VR button which confuses AR users.
     -->
     <a-scene 
-      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; filterMinCF:0.0001; filterBeta: 0.001;" 
-      color-space="sRGB" 
-      renderer="colorManagement: true, physicallyCorrectLights" 
-      vr-mode-ui="enabled: false" 
-      device-orientation-permission-ui="enabled: false">
+      embedded 
+      arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+      vr-mode-ui="enabled: false"
+      renderer="logarithmicDepthBuffer: true;">
 
       <a-assets>
         <img id="boxTexture" src="https://cdn.aframe.io/360-image-gallery-boilerplate/img/cubes.jpg">
       </a-assets>
 
-      <!-- Camera must not have look-controls enabled by default for Image Tracking -->
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-
       <!-- 
-        Image Target
-        targetIndex: 0 corresponds to the first image in the .mind file
+        HIRO MARKER 
+        This is the default marker for AR.js. Reliable and fast.
+        When the camera sees the black "Hiro" square, the content inside this tag appears.
       -->
-      <a-entity mindar-image-target="targetIndex: 0">
+      <a-marker preset="hiro">
+        
+        <!-- The Content: A spinning box -->
+        <a-box 
+          position="0 0.5 0" 
+          material="src: #boxTexture; color: #4CC3D9"
+          animation="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear">
+        </a-box>
 
-        <!-- The Content: Anchored to the image -->
-        <a-entity id="slam-object">
-          <a-box 
-            position="0 0 0.1" 
-            scale="0.5 0.5 0.5"
-            material="src: #boxTexture; color: #ff5e5e"
-            animation="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear">
-          </a-box>
-          
-          <!-- Plane to visualize "ground" relative to card -->
-          <a-plane 
-            position="0 0 0"
-            rotation="0 0 0" 
-            width="1.5" height="1.5" 
-            material="shader: flat; color: #333; opacity: 0.5; transparent: true">
-          </a-plane>
-        </a-entity>
+      </a-marker>
 
-      </a-entity>
+      <!-- Camera -->
+      <a-entity camera></a-entity>
 
     </a-scene>
   </body>
