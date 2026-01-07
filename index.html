@@ -2,133 +2,15 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Self-Hosted Image Handoff (MindAR)</title>
+    <title>Self-Hosted MindAR (Simple)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     
-    <!-- UI Styles -->
-    <style>
-      #overlay {
-        position: absolute;
-        bottom: 30px;
-        left: 0;
-        width: 100%;
-        text-align: center;
-        z-index: 10;
-        pointer-events: none;
-        display: none;
-      }
-      
-      #place-button {
-        pointer-events: auto;
-        padding: 12px 24px;
-        font-size: 18px;
-        font-weight: bold;
-        background-color: #ff5e5e; /* Red for MindAR theme */
-        color: white;
-        border: 2px solid white;
-        border-radius: 25px;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.3);
-        cursor: pointer;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-      }
-
-      #place-button:active {
-        transform: scale(0.95);
-        background-color: #e04e4e;
-      }
-    </style>
-
-    <!-- 1. A-Frame and MindAR Libraries (No API Key needed) -->
+    <!-- 1. A-Frame and MindAR Libraries -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-
-    <script>
-      /**
-       * Component: world-transfer
-       * Adapted for MindAR
-       * * Note: MindAR does not support SLAM (World Tracking). 
-       * When we detach the object, it will hang in 3DoF space (Rotation only).
-       * If the user walks physically, the object will drift with them.
-       */
-      AFRAME.registerComponent('world-transfer', {
-        schema: {
-          target: {type: 'selector'},
-          button: {type: 'selector'}
-        },
-
-        init: function() {
-          const targetEl = this.data.target;
-          const buttonEl = this.data.button;
-          const overlayEl = buttonEl ? buttonEl.parentElement : null;
-
-          if (!targetEl || !buttonEl) return;
-
-          // 1. Listen for MindAR events
-          this.el.addEventListener('targetFound', () => {
-            // Show button if not yet transferred
-            if (targetEl.parentNode !== this.el.sceneEl) {
-              overlayEl.style.display = 'block';
-            }
-          });
-
-          this.el.addEventListener('targetLost', () => {
-            // Hide button if we haven't locked it yet
-            if (targetEl.parentNode !== this.el.sceneEl) {
-              overlayEl.style.display = 'none';
-            }
-          });
-
-          // 2. Transfer Logic
-          const performTransfer = () => {
-            if (targetEl.parentNode === this.el.sceneEl) return;
-
-            console.log('Initiating Transfer...');
-            overlayEl.style.display = 'none';
-
-            // Capture World Transforms
-            const worldPos = new THREE.Vector3();
-            const worldQuat = new THREE.Quaternion();
-            const worldScale = new THREE.Vector3();
-            
-            targetEl.object3D.getWorldPosition(worldPos);
-            targetEl.object3D.getWorldQuaternion(worldQuat);
-            targetEl.object3D.getWorldScale(worldScale);
-
-            // Detach and Attach to Scene
-            targetEl.parentNode.removeChild(targetEl);
-            this.el.sceneEl.appendChild(targetEl);
-
-            // Re-apply transforms
-            // We use setTimeout to allow the DOM to update
-            setTimeout(() => {
-              targetEl.object3D.position.copy(worldPos);
-              targetEl.object3D.quaternion.copy(worldQuat);
-              targetEl.object3D.scale.copy(worldScale);
-              targetEl.setAttribute('visible', 'true');
-              
-              // Flash effect
-              targetEl.setAttribute('animation__flash', {
-                property: 'material.emissive',
-                from: '#FFFFFF',
-                to: '#000000',
-                dur: 300
-              });
-            }, 50);
-          };
-
-          buttonEl.addEventListener('click', performTransfer);
-        }
-      });
-    </script>
   </head>
 
   <body>
-    <!-- HTML UI Overlay -->
-    <div id="overlay">
-      <button id="place-button">Lock to View</button>
-    </div>
-
     <!-- 
       MindAR Scene Config
       imageTargetSrc: URL to your compiled .mind file.
@@ -152,11 +34,9 @@
         Image Target
         targetIndex: 0 corresponds to the first image in the .mind file
       -->
-      <a-entity 
-        mindar-image-target="targetIndex: 0"
-        world-transfer="target: #slam-object; button: #place-button">
+      <a-entity mindar-image-target="targetIndex: 0">
 
-        <!-- The Content -->
+        <!-- The Content: Anchored to the image -->
         <a-entity id="slam-object">
           <a-box 
             position="0 0 0.1" 
@@ -164,6 +44,7 @@
             material="src: #boxTexture; color: #ff5e5e"
             animation="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear">
           </a-box>
+          
           <!-- Plane to visualize "ground" relative to card -->
           <a-plane 
             position="0 0 0"
