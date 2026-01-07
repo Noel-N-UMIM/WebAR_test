@@ -6,53 +6,68 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     
     <!-- 1. Libraries: A-Frame 1.2.0 + AR.js -->
-    <!-- This specific combination is known for high stability on iOS Safari -->
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
     <style>
       body { margin: 0; overflow: hidden; font-family: sans-serif; }
       
-      #overlay {
+      /* New UI Layer for the Button */
+      #ui-layer {
         position: absolute;
-        top: 0;
+        bottom: 30px;
         left: 0;
         width: 100%;
-        height: 100%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 10;
-        pointer-events: none;
+        text-align: center;
+        z-index: 100;
+        pointer-events: none; /* Let clicks pass through around the button */
       }
 
-      .message-box {
-        background: rgba(0, 0, 0, 0.7);
+      #jump-btn {
+        pointer-events: auto; /* Enable clicking on the button itself */
+        padding: 15px 30px;
+        font-size: 20px;
+        font-weight: bold;
+        background-color: #4CC3D9;
         color: white;
-        padding: 20px;
-        border-radius: 10px;
-        text-align: center;
-        pointer-events: auto;
+        border: 3px solid white;
+        border-radius: 30px;
+        cursor: pointer;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        transition: transform 0.1s;
       }
       
-      a { color: #4dc3ff; font-weight: bold; }
+      #jump-btn:active {
+        transform: scale(0.95);
+        background-color: #3aa8b9;
+      }
     </style>
+
+    <script>
+      // Component to handle button click
+      AFRAME.registerComponent('jump-listener', {
+        init: function () {
+          const btn = document.querySelector('#jump-btn');
+          const el = this.el;
+          
+          // When button is clicked, emit the event to start animation
+          btn.addEventListener('click', () => {
+            el.emit('start-jump');
+          });
+        }
+      });
+    </script>
   </head>
 
   <body style="margin: 0; overflow: hidden;">
     
-    <div id="overlay">
-      <div class="message-box">
-        <p>📡 Point camera at the <b>Hiro Marker</b></p>
-        <p><a href="https://upload.wikimedia.org/wikipedia/commons/4/48/Hiro_marker_ARjs.png" target="_blank">Click to Open Marker Image</a></p>
-      </div>
+    <!-- UI Button -->
+    <div id="ui-layer">
+      <button id="jump-btn">JUMP!</button>
     </div>
 
     <!-- 
       AR.js Scene Config 
-      embedded: Essential for mobile css handling
-      arjs: The main component. sourceType: webcam reads the phone camera.
-      vr-mode-ui="enabled: false": Hides VR button which confuses AR users.
     -->
     <a-scene 
       embedded 
@@ -66,16 +81,21 @@
 
       <!-- 
         HIRO MARKER 
-        This is the default marker for AR.js. Reliable and fast.
-        When the camera sees the black "Hiro" square, the content inside this tag appears.
       -->
       <a-marker preset="hiro">
         
-        <!-- The Content: A spinning box -->
+        <!-- The Content: A box that spins AND jumps -->
+        <!-- 
+          animation__rotation: Constant spinning
+          animation__jump: Triggered by button (startEvents: start-jump)
+          loop: 2 with dir: alternate creates one full Up-Down cycle
+        -->
         <a-box 
+          jump-listener
           position="0 0.5 0" 
           material="src: #boxTexture; color: #4CC3D9"
-          animation="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear">
+          animation__rotation="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear"
+          animation__jump="property: position; from: 0 0.5 0; to: 0 1.5 0; dur: 300; dir: alternate; loop: 2; startEvents: start-jump; easing: easeOutQuad">
         </a-box>
 
       </a-marker>
