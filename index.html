@@ -2,130 +2,112 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MindAR - Always Visible Sticky Content</title>
-    <!-- A-Frame -->
+    <title>MindAR - Fixed Target Index</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <!-- MindAR Image Tracking -->
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     
     <style>
-      body {
-        margin: 0;
-        overflow: hidden;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      }
-      
-      /* UI Overlay */
+      body { margin: 0; overflow: hidden; font-family: sans-serif; }
       #ui-overlay {
-        position: absolute;
-        bottom: 20px;
-        left: 0;
-        width: 100%;
-        text-align: center;
-        z-index: 10;
-        pointer-events: none;
+        position: absolute; bottom: 20px; left: 0; width: 100%;
+        text-align: center; pointer-events: none; z-index: 999;
       }
-      
-      .status-pill {
-        display: inline-block;
-        background: rgba(0, 0, 0, 0.7);
-        color: white;
-        padding: 10px 20px;
-        border-radius: 30px;
-        font-size: 14px;
-        transition: all 0.3s ease;
-        backdrop-filter: blur(5px);
-        border: 1px solid rgba(255,255,255,0.2);
+      .status {
+        background: rgba(0,0,0,0.7); color: white; padding: 10px 20px;
+        border-radius: 20px; font-weight: bold; border: 1px solid white;
+        transition: background 0.3s;
       }
-
-      .status-pill.active {
-        background: rgba(46, 204, 113, 0.8);
-        color: #fff;
-        font-weight: bold;
-        transform: scale(1.05);
-      }
-
-      .status-pill.lost {
-        background: rgba(231, 76, 60, 0.8);
-      }
-
-      #start-button {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 20;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        padding: 15px 40px;
-        font-size: 18px;
-        border-radius: 50px;
-        cursor: pointer;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        pointer-events: auto;
-      }
+      .status.found { background: #2ecc71; }
+      .status.lost { background: #e74c3c; }
     </style>
 
     <script>
       /**
-       * Component: sticky-content
-       * * Decouples the content from the MindAR target. 
-       * It manually copies the transform of the target to the content
-       * only when the target is actively found.
+       * SMART COMPONENT: sticky-logic
+       * * Robustly links content to a specific targetIndex.
+       * Usage: <a-entity sticky-logic="targetIndex: 0">
        */
-      AFRAME.registerComponent('sticky-content', {
+      AFRAME.registerComponent('sticky-logic', {
         schema: {
-          target: {type: 'selector'} // The MindAR target entity
+          targetIndex: {type: 'int', default: 0}
         },
 
         init: function() {
-          this.targetEl = this.data.target;
           this.isTracking = false;
-          this.statusUI = document.getElementById('status-text');
-
-          // Bind event listeners to the TARGET entity, not this entity
-          this.targetEl.addEventListener('targetFound', () => {
-            this.isTracking = true;
-            this.updateUI("Target Found - Content Locked");
-            
-            // Optional: Add a pop animation when found
-            this.el.setAttribute('animation', {
-              property: 'scale',
-              to: '0.1 0.1 0.1',
-              dur: 300,
-              easing: 'easeOutElastic'
-            });
-          });
-
-          this.targetEl.addEventListener('targetLost', () => {
-            this.isTracking = false;
-            this.updateUI("Target Lost - Content Frozen in Place");
-          });
+          this.targetEl = null;
+          this.ui = document.getElementById('status-msg');
+          
+          // Retry finding target if not immediately available
+          const retryFind = () => {
+            this.findTarget();
+            if(!this.targetEl) setTimeout(retryFind, 500);
+          };
+          retryFind();
         },
 
-        updateUI: function(msg) {
-          if(this.statusUI) {
-            this.statusUI.innerText = msg;
-            if(this.isTracking) {
-              this.statusUI.classList.add('active');
-              this.statusUI.classList.remove('lost');
-            } else {
-              this.statusUI.classList.remove('active');
-              this.statusUI.classList.add('lost');
+        findTarget: function() {
+          if (this.targetEl) return; // Already found
+
+          const targets = document.querySelectorAll('[mindar-image-target]');
+          
+          for (let i = 0; i < targets.length; i++) {
+            const el = targets[i];
+            const targetIndex = this.data.targetIndex;
+            
+            // Method 1: Check initialized component data (Best)
+            if (el.components['mindar-image-target'] && 
+                el.components['mindar-image-target'].data.targetIndex === targetIndex) {
+              this.bindTarget(el);
+              return;
+            }
+
+            // Method 2: Check HTML attribute (Fallback)
+            const attr = el.getAttribute('mindar-image-target');
+            if (typeof attr === 'object' && attr.targetIndex === targetIndex) {
+              this.bindTarget(el);
+              return;
+            } else if (typeof attr === 'string' && attr.includes(`targetIndex: ${targetIndex}`)) {
+              this.bindTarget(el);
+              return;
             }
           }
         },
 
+        bindTarget: function(el) {
+          this.targetEl = el;
+          console.log(`Sticky Logic: Linked Index ${this.data.targetIndex} to`, el);
+
+          this.targetEl.addEventListener('targetFound', () => {
+            this.isTracking = true;
+            this.updateUI(true);
+            this.el.setAttribute('visible', true);
+          });
+
+          this.targetEl.addEventListener('targetLost', () => {
+            this.isTracking = false;
+            this.updateUI(false);
+            // Content REMAINS VISIBLE (Frozen)
+          });
+        },
+
+        updateUI: function(found) {
+          if(!this.ui) return;
+          if (found) {
+            this.ui.innerText = `Target ${this.data.targetIndex} Found`;
+            this.ui.classList.add('found');
+            this.ui.classList.remove('lost');
+          } else {
+            this.ui.innerText = `Target ${this.data.targetIndex} Frozen`;
+            this.ui.classList.add('lost');
+            this.ui.classList.remove('found');
+          }
+        },
+
         tick: function() {
-          // The Magic: Only sync position if currently tracking
-          if (this.isTracking && this.targetEl.object3D.visible) {
-            // We copy the world position/rotation/scale from target to this entity
+          if (this.isTracking && this.targetEl && this.targetEl.object3D.visible) {
             this.el.object3D.position.copy(this.targetEl.object3D.position);
             this.el.object3D.quaternion.copy(this.targetEl.object3D.quaternion);
-            
-            // For scale, we might want to keep it consistent or sync it
-            // this.el.object3D.scale.copy(this.targetEl.object3D.scale); 
+            this.el.object3D.scale.copy(this.targetEl.object3D.scale);
           }
         }
       });
@@ -133,91 +115,39 @@
   </head>
   <body>
 
-    <!-- UI Overlay -->
     <div id="ui-overlay">
-      <div id="status-text" class="status-pill">Scan the Raccoon Card</div>
+      <div id="status-msg" class="status">Scan Target...</div>
     </div>
 
-    <!-- Start Button (AR often needs user interaction to start audio/video) -->
-    <button id="start-button">Start AR Experience</button>
-
-    <!-- AR Scene 
-         mindar-image: imageTargetSrc points to the standard example card. 
-         missTolerance: 0 ensures lost event fires quickly for cleaner "sticking"
-    -->
     <a-scene 
-      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; autoStart: false; uiLoading: no; uiScanning: no; filterMinCF:0.0001; filterBeta: 0.001;" 
+      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; autoStart: true; uiLoading: no; uiScanning: no;" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
       device-orientation-permission-ui="enabled: false">
 
-      <!-- Assets -->
       <a-assets>
-        <!-- Standard Raccoon Model -->
         <a-asset-item id="raccoonModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/band-example/raccoon/scene.gltf"></a-asset-item>
       </a-assets>
-
-      <!-- Camera -->
+      
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
       <!-- 
-        THE TARGET 
-        This is an empty entity that purely tracks the image.
-        Note: It has NO visible children.
+        TARGET SETUP 
+        Use targetIndex: 0, 1, 2 etc.
       -->
-      <a-entity id="my-target" mindar-image-target="targetIndex: 0"></a-entity>
-
+      <a-entity mindar-image-target="targetIndex: 0"></a-entity>
+      
       <!-- 
-        THE CONTENT
-        This is a SIBLING to the target (Decoupled).
-        It uses the 'sticky-content' component to follow 'my-target'.
+        CONTENT SETUP
+        Use sticky-logic="targetIndex: 0" to match the target above.
       -->
-      <a-entity 
-        id="my-content" 
-        sticky-content="target: #my-target"
-        visible="true">
-        
-        <!-- The actual 3D model inside our sticky container -->
-        <a-gltf-model 
-          rotation="0 0 0" 
-          position="0 0 0.1" 
-          scale="0.1 0.1 0.1" 
-          src="#raccoonModel" 
-          animation="property: position; to: 0 0.1 0.1; dir: alternate; dur: 2000; loop: true">
+      <a-entity sticky-logic="targetIndex: 0">
+        <a-gltf-model src="#raccoonModel" position="0 0 0.1" scale="0.1 0.1 0.1" 
+          animation="property: position; to: 0 0.1 0.1; dur: 1000; dir: alternate; loop: true">
         </a-gltf-model>
-
-        <!-- A little shadow plane to make it look grounded in air -->
-        <a-plane 
-            position="0 -0.05 0.1" 
-            rotation="-90 0 0" 
-            width="0.5" 
-            height="0.5" 
-            color="#000" 
-            opacity="0.3"
-            material="transparent: true">
-        </a-plane>
-
       </a-entity>
 
-      <!-- Lights -->
-      <a-light type="ambient" intensity="0.6"></a-light>
-      <a-light type="directional" position="1 1 1" intensity="0.8"></a-light>
-
     </a-scene>
-
-    <script>
-      const startBtn = document.getElementById('start-button');
-      const scene = document.querySelector('a-scene');
-
-      startBtn.addEventListener('click', () => {
-        startBtn.style.display = 'none';
-        scene.systems['mindar-image-system'].start();
-        
-        // Show scanning UI
-        const ui = document.getElementById('status-text');
-        ui.innerText = "Scanning...";
-      });
-    </script>
   </body>
 </html>
