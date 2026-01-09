@@ -1,153 +1,22 @@
-<!DOCTYPE html>
+
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MindAR - Fixed Target Index</title>
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-    
-    <style>
-      body { margin: 0; overflow: hidden; font-family: sans-serif; }
-      #ui-overlay {
-        position: absolute; bottom: 20px; left: 0; width: 100%;
-        text-align: center; pointer-events: none; z-index: 999;
-      }
-      .status {
-        background: rgba(0,0,0,0.7); color: white; padding: 10px 20px;
-        border-radius: 20px; font-weight: bold; border: 1px solid white;
-        transition: background 0.3s;
-      }
-      .status.found { background: #2ecc71; }
-      .status.lost { background: #e74c3c; }
-    </style>
-
-    <script>
-      /**
-       * SMART COMPONENT: sticky-logic
-       * * Robustly links content to a specific targetIndex.
-       * Usage: <a-entity sticky-logic="targetIndex: 0">
-       */
-      AFRAME.registerComponent('sticky-logic', {
-        schema: {
-          targetIndex: {type: 'int', default: 0}
-        },
-
-        init: function() {
-          this.isTracking = false;
-          this.targetEl = null;
-          this.ui = document.getElementById('status-msg');
-          
-          // Retry finding target if not immediately available
-          const retryFind = () => {
-            this.findTarget();
-            if(!this.targetEl) setTimeout(retryFind, 500);
-          };
-          retryFind();
-        },
-
-        findTarget: function() {
-          if (this.targetEl) return; // Already found
-
-          const targets = document.querySelectorAll('[mindar-image-target]');
-          
-          for (let i = 0; i < targets.length; i++) {
-            const el = targets[i];
-            const targetIndex = this.data.targetIndex;
-            
-            // Method 1: Check initialized component data (Best)
-            if (el.components['mindar-image-target'] && 
-                el.components['mindar-image-target'].data.targetIndex === targetIndex) {
-              this.bindTarget(el);
-              return;
-            }
-
-            // Method 2: Check HTML attribute (Fallback)
-            const attr = el.getAttribute('mindar-image-target');
-            if (typeof attr === 'object' && attr.targetIndex === targetIndex) {
-              this.bindTarget(el);
-              return;
-            } else if (typeof attr === 'string' && attr.includes(`targetIndex: ${targetIndex}`)) {
-              this.bindTarget(el);
-              return;
-            }
-          }
-        },
-
-        bindTarget: function(el) {
-          this.targetEl = el;
-          console.log(`Sticky Logic: Linked Index ${this.data.targetIndex} to`, el);
-
-          this.targetEl.addEventListener('targetFound', () => {
-            this.isTracking = true;
-            this.updateUI(true);
-            this.el.setAttribute('visible', true);
-          });
-
-          this.targetEl.addEventListener('targetLost', () => {
-            this.isTracking = false;
-            this.updateUI(false);
-            // Content REMAINS VISIBLE (Frozen)
-          });
-        },
-
-        updateUI: function(found) {
-          if(!this.ui) return;
-          if (found) {
-            this.ui.innerText = `Target ${this.data.targetIndex} Found`;
-            this.ui.classList.add('found');
-            this.ui.classList.remove('lost');
-          } else {
-            this.ui.innerText = `Target ${this.data.targetIndex} Frozen`;
-            this.ui.classList.add('lost');
-            this.ui.classList.remove('found');
-          }
-        },
-
-        tick: function() {
-          if (this.isTracking && this.targetEl && this.targetEl.object3D.visible) {
-            this.el.object3D.position.copy(this.targetEl.object3D.position);
-            this.el.object3D.quaternion.copy(this.targetEl.object3D.quaternion);
-            this.el.object3D.scale.copy(this.targetEl.object3D.scale);
-          }
-        }
-      });
-    </script>
   </head>
   <body>
-
-    <div id="ui-overlay">
-      <div id="status-msg" class="status">Scan Target...</div>
-    </div>
-
-    <a-scene 
-      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; autoStart: true; uiLoading: no; uiScanning: no;" 
-      color-space="sRGB" 
-      renderer="colorManagement: true, physicallyCorrectLights" 
-      vr-mode-ui="enabled: false" 
-      device-orientation-permission-ui="enabled: false">
-
+    <a-scene mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind;" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
       <a-assets>
-        <a-asset-item id="raccoonModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/band-example/raccoon/scene.gltf"></a-asset-item>
+        <img id="card" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png" />
+        <a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf"></a-asset-item>
       </a-assets>
-      
+
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-
-      <!-- 
-        TARGET SETUP 
-        Use targetIndex: 0, 1, 2 etc.
-      -->
-      <a-entity mindar-image-target="targetIndex: 0"></a-entity>
-      
-      <!-- 
-        CONTENT SETUP
-        Use sticky-logic="targetIndex: 0" to match the target above.
-      -->
-      <a-entity sticky-logic="targetIndex: 0">
-        <a-gltf-model src="#raccoonModel" position="0 0 0.1" scale="0.1 0.1 0.1" 
-          animation="property: position; to: 0 0.1 0.1; dur: 1000; dir: alternate; loop: true">
-        </a-gltf-model>
+      <a-entity mindar-image-target="targetIndex: 0">
+        <a-plane src="#card" position="0 0 0" height="0.552" width="1" rotation="0 0 0"></a-plane>
+        <a-gltf-model rotation="0 0 0 " position="0 0 0.1" scale="0.005 0.005 0.005" src="#avatarModel" animation="property: position; to: 0 0.1 0.1; dur: 1000; easing: easeInOutQuad; loop: true; dir: alternate">
       </a-entity>
-
     </a-scene>
   </body>
 </html>
