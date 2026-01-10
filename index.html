@@ -3,130 +3,124 @@
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MindAR Image-to-World Handoff</title>
-    
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-
+    
     <script>
       /**
-       * COMPONENT: image-handoff-system
-       * * Emulates 8th Wall's "Image-to-SLAM" handoff for MindAR.
-       * When the image target is found, the content snaps to the image.
-       * When the image target is lost, the content remains visible and stays 
-       * at its last known world position (anchored to the scene).
-       * * Note: Since MindAR is image-only (no native SLAM), 'World Tracking' 
-       * here relies on the device's gyro (3DOF) after the target is lost.
+       * COMPONENT: ghost-follower
+       * Implements the "Handoff" logic.
+       * 1. Target Found: Snaps the 'ghost' model to the image target's position/rotation/scale.
+       * 2. Target Lost: Stops updating, leaving the 'ghost' model in the last known world position.
        */
-      AFRAME.registerComponent('image-handoff-system', {
+      AFRAME.registerComponent('ghost-follower', {
         schema: {
-          target: { type: 'selector' } // The content to hand off
+          target: { type: 'selector' } // The model to control
         },
 
         init: function () {
-          this.isFound = false;
-          this.contentEl = this.data.target;
+          this.isTracking = false;
+          this.targetEl = this.data.target;
           
-          // Bind methods
-          this.onTargetFound = this.onTargetFound.bind(this);
-          this.onTargetLost = this.onTargetLost.bind(this);
-          
-          // Listen to MindAR events on this entity (the image target)
-          this.el.addEventListener('mindar-image-found', this.onTargetFound);
-          this.el.addEventListener('mindar-image-lost', this.onTargetLost);
+          // Reusable Three.js vectors to prevent garbage collection stutter
+          this.worldPos = new THREE.Vector3();
+          this.worldQuat = new THREE.Quaternion();
+          this.worldScale = new THREE.Vector3();
+
+          // Bind events
+          this.el.addEventListener('mindar-image-found', () => {
+            console.log("Target Found");
+            this.isTracking = true;
+            // Make model visible when found for the first time
+            if (this.targetEl) this.targetEl.setAttribute('visible', true);
+          });
+
+          this.el.addEventListener('mindar-image-lost', () => {
+            console.log("Target Lost - Handoff to World");
+            this.isTracking = false;
+            // We do NOT hide the model here. It stays anchored in world space.
+          });
         },
 
-        onTargetFound: function () {
-          console.log("Target Found: Snapping content to target.");
-          this.isFound = true;
+        tick: function () {
+          if (!this.isTracking || !this.targetEl) return;
 
-          // Reparent content back to the image target (this.el)
-          // This allows MindAR to control the position again
-          if (this.contentEl.parentEl !== this.el) {
-            this.contentEl.object3D.position.set(0, 0, 0);
-            this.contentEl.object3D.rotation.set(0, 0, 0);
-            this.contentEl.object3D.scale.set(1, 1, 1); // Reset scale if needed
-            this.el.object3D.add(this.contentEl.object3D);
-          }
+          // 1. Get the world transform of the Image Target (this.el)
+          this.el.object3D.getWorldPosition(this.worldPos);
+          this.el.object3D.getWorldQuaternion(this.worldQuat);
+          this.el.object3D.getWorldScale(this.worldScale);
 
-          // Ensure visible
-          this.contentEl.setAttribute('visible', true);
-        },
-
-        onTargetLost: function () {
-          console.log("Target Lost: Handing off to World.");
-          
-          // 1. Get the current World Position and Rotation of the content
-          const worldPos = new THREE.Vector3();
-          const worldQuat = new THREE.Quaternion();
-          const worldScale = new THREE.Vector3();
-          
-          this.contentEl.object3D.getWorldPosition(worldPos);
-          this.contentEl.object3D.getWorldQuaternion(worldQuat);
-          this.contentEl.object3D.getWorldScale(worldScale);
-
-          // 2. Reparent to the Scene (World)
-          // This detaches it from the tracking target so it stops jumping around
-          // or disappearing when the target is gone.
-          const scene = this.el.sceneEl;
-          scene.object3D.add(this.contentEl.object3D);
-
-          // 3. Apply the saved World Transforms to maintain visual continuity
-          this.contentEl.object3D.position.copy(worldPos);
-          this.contentEl.object3D.quaternion.copy(worldQuat);
-          this.contentEl.object3D.scale.copy(worldScale);
-
-          // 4. Force visibility (MindAR tries to hide children of targets on loss)
-          this.contentEl.setAttribute('visible', true);
+          // 2. Apply it to the "Ghost" Model
+          this.targetEl.object3D.position.copy(this.worldPos);
+          this.targetEl.object3D.quaternion.copy(this.worldQuat);
+          this.targetEl.object3D.scale.copy(this.worldScale);
         }
       });
     </script>
-
+    
     <style>
-      /* Simple UI Overlay */
-      #scanning-overlay {
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        pointer-events: none;
-        z-index: 999;
+      body { margin: 0; overflow: hidden; }
+      #overlay {
+        position: absolute; top: 20px; left: 0; width: 100%;
+        text-align: center; pointer-events: none; z-index: 999;
       }
-      .inner {
-        background: rgba(0, 0, 0, 0.5);
-        color: white;
-        padding: 20px;
-        border-radius: 10px;
-        font-family: sans-serif;
+      .instruction {
+        background: rgba(0,0,0,0.6); color: white; padding: 10px 20px;
+        border-radius: 20px; font-family: sans-serif; display: inline-block;
       }
     </style>
   </head>
   <body>
-    <div id="scanning-overlay">
-      <div class="inner">Scan the Target Image</div>
+    <div id="overlay">
+      <div class="instruction">Scan the "Rational Integer" Card</div>
     </div>
 
     <a-scene 
-      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; uiLoading: no; uiScanning: no; filterMinCF:0.0001; filterBeta: 0.001;" 
+      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; uiLoading: no; uiScanning: no;" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
       device-orientation-permission-ui="enabled: false">
       
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-
-   <a-assets>
-	<img id="card" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png" />
-	<a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf"></a-asset-item>
+      <a-assets>
+        <img id="card" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png" />
+        <a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf"></a-asset-item>
       </a-assets>
 
-      <a-entity id="my-ar-object" mixin="cube-model" position="0 0 0" scale="0.5 0.5 0.5" visible="false"></a-entity>
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <a-entity 
-        mindar-image-target="targetIndex: 0"
-        image-handoff-system="target: #my-ar-object">
+      <!-- 
+        THE GHOST MODEL (Persists when target is lost)
+        Moved OUTSIDE the mindar-image-target so it lives in the World.
+        Initially invisible.
+      -->
+      <a-entity id="avatar-ghost" visible="false">
+        <!-- 
+           Note: I nested the model inside a container entity. 
+           The 'ghost-follower' moves the container (#avatar-ghost).
+           The local transforms (rotation, position offset, animation) apply to the child model.
+        -->
+        <a-gltf-model 
+          src="#avatarModel" 
+          rotation="0 0 0" 
+          position="0 0 0.1" 
+          scale="0.005 0.005 0.005"
+          animation="property: position; to: 0 0.1 0.1; dur: 1000; easing: easeInOutQuad; loop: true; dir: alternate">
+        </a-gltf-model>
       </a-entity>
 
+      <!-- 
+        THE ANCHOR
+        The 'ghost-follower' component connects this target to the #avatar-ghost
+      -->
+      <a-entity 
+        mindar-image-target="targetIndex: 0"
+        ghost-follower="target: #avatar-ghost">
+        
+        <!-- Optional: Keep the card plane here if you want it to disappear on loss -->
+        <a-plane src="#card" position="0 0 0" height="0.552" width="1" rotation="0 0 0"></a-plane>
+      
+      </a-entity>
     </a-scene>
   </body>
 </html>
