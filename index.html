@@ -1,126 +1,226 @@
-<!DOCTYPE html>
+<!-- Start of the HTML document  -->
 <html>
   <head>
+    <!-- Sets the viewport for mobile devices to ensure correct scaling  -->
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MindAR Image-to-World Handoff</title>
+    
+    <!-- Import A-Frame library (framework for building 3D/AR on the web)  -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    
+    <!-- Import MindAR library (engine for image tracking)  -->
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     
-    <script>
-      /**
-       * COMPONENT: ghost-follower
-       * Implements the "Handoff" logic.
-       * 1. Target Found: Snaps the 'ghost' model to the image target's position/rotation/scale.
-       * 2. Target Lost: Stops updating, leaving the 'ghost' model in the last known world position.
-       */
-      AFRAME.registerComponent('ghost-follower', {
-        schema: {
-          target: { type: 'selector' } // The model to control
-        },
-
-        init: function () {
-          this.isTracking = false;
-          this.targetEl = this.data.target;
-          
-          // Reusable Three.js vectors to prevent garbage collection stutter
-          this.worldPos = new THREE.Vector3();
-          this.worldQuat = new THREE.Quaternion();
-          this.worldScale = new THREE.Vector3();
-
-          // Bind events
-          this.el.addEventListener('mindar-image-found', () => {
-            console.log("Target Found");
-            this.isTracking = true;
-            // Make model visible when found for the first time
-            if (this.targetEl) this.targetEl.setAttribute('visible', true);
-          });
-
-          this.el.addEventListener('mindar-image-lost', () => {
-            console.log("Target Lost - Handoff to World");
-            this.isTracking = false;
-            // We do NOT hide the model here. It stays anchored in world space.
-          });
-        },
-
-        tick: function () {
-          if (!this.isTracking || !this.targetEl) return;
-
-          // 1. Get the world transform of the Image Target (this.el)
-          this.el.object3D.getWorldPosition(this.worldPos);
-          this.el.object3D.getWorldQuaternion(this.worldQuat);
-          this.el.object3D.getWorldScale(this.worldScale);
-
-          // 2. Apply it to the "Ghost" Model
-          this.targetEl.object3D.position.copy(this.worldPos);
-          this.targetEl.object3D.quaternion.copy(this.worldQuat);
-          this.targetEl.object3D.scale.copy(this.worldScale);
-        }
-      });
-    </script>
-    
     <style>
-      body { margin: 0; overflow: hidden; }
-      #overlay {
-        position: absolute; top: 20px; left: 0; width: 100%;
-        text-align: center; pointer-events: none; z-index: 999;
+      /* Basic reset for body margins  */
+      body { margin: 0; }
+      
+      /* Container for the "Start AR" button overlay */
+      #start-button-container {
+        position: absolute; /* Floating above content  */
+        top: 0; left: 0; right: 0; bottom: 0; /* Full screen  */
+        z-index: 11; /* Ensures it sits on top of the camera  */
+        display: flex; /* Use flexbox for centering  */
+        justify-content: center; /* Center horizontally  */
+        align-items: center; /* Center vertically  */
+        background-color: rgba(0, 0, 0, 0.7); /* Semi-transparent black background  */
       }
-      .instruction {
-        background: rgba(0,0,0,0.6); color: white; padding: 10px 20px;
-        border-radius: 20px; font-family: sans-serif; display: inline-block;
+      
+      /* Styling for the action button  */
+      .action-button {
+        padding: 12px 24px;
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: white;
+        background-color: #007aff; /* iOS Blue  */
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); /* Subtle shadow */
       }
     </style>
-  </head>
-  <body>
-    <div id="overlay">
-      <div class="instruction">Scan the "Rational Integer" Card</div>
-    </div>
 
+    <script>
+      // --- CUSTOM COMPONENT: The "Magnet" Logic ---
+      
+      // Registers a new A-Frame component named 'follow-target' 
+      AFRAME.registerComponent('follow-target', {
+        // Defines the properties (inputs) this component accepts 
+        schema: {
+          target: {type: 'selector'}, // Reference to the target element to follow 
+          isTracking: {type: 'boolean', default: false} // Switch to enable/disable tracking 
+        },
+        
+        // 'tick' runs every single frame (approx 60 times per second) 
+        tick: function () {
+          
+          // If tracking is OFF or no target is assigned, stop here 
+          if (!this.data.isTracking || !this.data.target) {
+            return;
+          }
+          
+          // If the target itself is hidden (lost by MindAR), stop tracking logic 
+          if (!this.data.target.object3D.visible) {
+            this.data.isTracking = false; 
+            return;
+          }
+
+          // Get the underlying 3D objects (Three.js objects) / 
+          const targetObj = this.data.target.object3D;
+          const elObj = this.el.object3D;
+          
+          // COPY position, rotation, and scale from Target -> PASTE to Content
+      
+          targetObj.getWorldPosition(elObj.position);
+          targetObj.getWorldQuaternion(elObj.quaternion);
+          targetObj.getWorldScale(elObj.scale);
+        },
+        
+        // Helper function to turn the "magnet" ON 
+        startTracking: function() {
+          this.data.isTracking = true;
+        },
+        // Helper function to turn the "magnet" OFF 
+        stopTracking: function() {
+          this.data.isTracking = false;
+        }
+      });
+
+      // Main setup when the page loads 
+      document.addEventListener("DOMContentLoaded", function() {
+        // Select main DOM elements 
+        const sceneEl = document.querySelector('a-scene');
+        const startButtonContainer = document.querySelector("#start-button-container");
+        const startButton = document.querySelector("#start-button");
+      
+        const exampleTarget = document.querySelector('#example-target'); // The MindAR anchor 
+        const persistentContent = document.querySelector("#persistent-content"); // The decoupled content container 
+        const videoAsset = document.querySelector("#videoAsset"); // The raw video element 
+        let arSystem;
+
+        // Access MindAR system once the scene is loaded 
+        sceneEl.addEventListener('loaded', function () {
+          arSystem = sceneEl.systems["mindar-image-system"];
+        });
+
+        // Setup Start Button (Crucial for browser autoplay policies)
+        
+        startButton.addEventListener('click', () => {
+          // "Prime" the video: play and immediately pause to get permission 
+          if (videoAsset) {
+            videoAsset.play();
+            videoAsset.pause();
+          }
+          arSystem.start(); // Start the AR camera 
+          startButtonContainer.style.display = 'none'; // Hide the button overlay 
+        });
+        
+        // EVENT: When the Image Target is detected 
+        exampleTarget.addEventListener("targetFound", event => {
+          console.log("target found");
+          
+          // Make the 3D content visible 
+          persistentContent.setAttribute('visible', 'true');
+          
+          // Start playing the video 
+          if (videoAsset) videoAsset.play(); 
+          
+          // Enable the "magnet": Content starts following the target
+          
+          persistentContent.components['follow-target'].startTracking();
+        });
+
+        // EVENT: When the Image Target is lost 
+        exampleTarget.addEventListener("targetLost", event => {
+          console.log("target lost");
+
+          // Disable the "magnet". The content stops updating its position.
+         
+          // IMPORTANT: We DO NOT hide the content here. It stays "frozen" in place.
+         
+          persistentContent.components['follow-target'].stopTracking();
+        });
+      });
+    </script>
+  </head>
+  
+  <body>
+    <!-- UI Overlay for Start Button  -->
+    <div id="start-button-container" class="button-container">
+      <button id="start-button" class="action-button">Iniciar AR</button>
+    </div>
+    
+    <!-- AR Scene Setup / -->
+    <!-- 'mindar-image': Main config (target file location, autoStart off)  -->
+    <!-- 'color-space' & 'renderer': Improving visual quality  -->
     <a-scene 
-      mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; uiLoading: no; uiScanning: no;" 
+      mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; maxTrack: 2; filterMinCF:1; filterBeta:10000; warmupTolerance:0.5; missTolerance:0.5;"
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
       device-orientation-permission-ui="enabled: false">
       
+      <!-- Asset Management System  -->
       <a-assets>
-        <img id="card" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png" />
-        <a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf"></a-asset-item>
+        <!-- Video asset setup  -->
+        <video id="videoAsset" 
+               preload="auto" 
+               loop="true" 
+               muted="true"
+               crossOrigin="anonymous" 
+               src="./videoAR.mp4">
+        </video>
+        
+        <!-- 3D Model asset setup (Wolf.glb)  -->
+        <a-asset-item id="tigerModel" src="./Wolf.glb" preload="auto"></a-asset-item>
       </a-assets>
 
+      <!-- The Camera  -->
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
       <!-- 
-        THE GHOST MODEL (Persists when target is lost)
-        Moved OUTSIDE the mindar-image-target so it lives in the World.
-        Initially invisible.
+           THE TARGET ANCHOR / EL ANCLA DEL TARGET
+           This entity is controlled by MindAR. It becomes visible/invisible automatically.
+          
+           Notice it is EMPTY. It has no children inside.
+           
       -->
-      <a-entity id="avatar-ghost" visible="false">
-        <!-- 
-           Note: I nested the model inside a container entity. 
-           The 'ghost-follower' moves the container (#avatar-ghost).
-           The local transforms (rotation, position offset, animation) apply to the child model.
-        -->
-        <a-gltf-model 
-          src="#avatarModel" 
-          rotation="0 0 0" 
-          position="0 0 0.1" 
-          scale="0.005 0.005 0.005"
-          animation="property: position; to: 0 0.1 0.1; dur: 1000; easing: easeInOutQuad; loop: true; dir: alternate">
-        </a-gltf-model>
-      </a-entity>
-
+      <a-entity id="example-target" mindar-image-target="targetIndex: 0"></a-entity>
+      
       <!-- 
-        THE ANCHOR
-        The 'ghost-follower' component connects this target to the #avatar-ghost
+           THE DECOUPLED CONTENT 
+           This is a SIBLING of the target, not a child.
+           
+           It uses our custom 'follow-target' component to sync manually.
+          
       -->
       <a-entity 
-        mindar-image-target="targetIndex: 0"
-        ghost-follower="target: #avatar-ghost">
+        id="persistent-content" 
+        visible="false" 
+        follow-target="target: #example-target; isTracking: false"
+        >
         
-        <!-- Optional: Keep the card plane here if you want it to disappear on loss -->
-        <a-plane src="#card" position="0 0 0" height="0.552" width="1" rotation="0 0 0"></a-plane>
-      
+        <!-- The AR Video Plane / El Plano de Video AR -->
+        <a-video 
+          id="ar-video"
+          src="#videoAsset" 
+          width="2" 
+          height="1" 
+          position="-1 0 0" 
+          rotation="0 0 0"
+          muted="true">
+        </a-video>
+        
+        <!-- The 3D Model / El Modelo 3D -->
+        <a-gltf-model
+          id="ar-model"
+          src="#tigerModel"
+          scale="0.3 0.3 0.3"
+          position="0.5 -0.5 0"
+          rotation="0 -90 0">
+        </a-gltf-model>
+
       </a-entity>
+      
     </a-scene>
   </body>
 </html>
