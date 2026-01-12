@@ -61,7 +61,7 @@
           isTracking: {type: 'boolean', default: false},
           // Two speeds: one for normal tracking, one for the "long flight" catch-up
           trackFactor: {type: 'number', default: 1.0},   // Responsive (for jitter smoothing) 0.1 = Very smooth, but slight lag (high stabilization). 1.0 = Instant updates (high jitter).
-          catchUpFactor: {type: 'number', default: 0.5} // Slow & smooth (for re-acquisition fly-in) default= .02
+          catchUpFactor: {type: 'number', default: 1.0} // Slow & smooth (for re-acquisition fly-in) default= .02
         },
         
         init: function() {
@@ -246,6 +246,7 @@
     </a-scene>
   </body>
 </html>
+
 
 
 
