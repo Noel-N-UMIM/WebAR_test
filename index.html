@@ -156,13 +156,24 @@
           startButtonContainer.style.display = 'none'; 
         });
         
+        // EVENT: When the Image Target is detected 
         exampleTarget.addEventListener("targetFound", event => {
           console.log("target found");
+          
+          // --- NEW: Hide the scanning UI permanently after first find ---
+          const scanningOverlay = document.querySelector('.mindar-ui-scanning');
+          if (scanningOverlay) {
+            scanningOverlay.style.display = 'none';
+          }
+          
+          // Make the 3D content visible 
           persistentContent.setAttribute('visible', 'true');
+          
           if (videoAsset) videoAsset.play(); 
           persistentContent.components['follow-target'].startTracking();
         });
 
+        // EVENT: When the Image Target is lost 
         exampleTarget.addEventListener("targetLost", event => {
           console.log("target lost");
           persistentContent.components['follow-target'].stopTracking();
@@ -209,7 +220,7 @@
       <a-entity 
         id="persistent-content" 
         visible="false" 
-        follow-target="target: #example-target; isTracking: false; trackFactor: 0.1; catchUpFactor: 0.02"
+        follow-target="target: #example-target; isTracking: false; trackFactor: 0.1; catchUpFactor: 0.05"
         >
         
         <a-video 
