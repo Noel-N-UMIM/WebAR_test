@@ -9,9 +9,6 @@
     
     <!-- 2. Load MindAR 1.2.5 -->
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-    
-    <!-- 3. Load A-Frame Extras 7.2.0 (For Animation) -->
-    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
 
     <style>
       body { margin: 0; overflow: hidden; }
@@ -23,10 +20,9 @@
         left: 0;
         width: 100%;
         height: 100%;
-        pointer-events: none; /* Let clicks pass through to 3D scene except on buttons */
+        pointer-events: none; /* Let clicks pass through to 3D scene */
         z-index: 999;
         display: none; /* Hidden until AR target is found */
-        display: flex;
         flex-direction: column;
         justify-content: flex-end;
         align-items: center;
@@ -34,29 +30,28 @@
       
       /* The Jump Button */
       #jump-btn {
-        pointer-events: auto; /* Enable clicking on the button */
-        background: linear-gradient(135deg, #ff4081, #d81b60);
+        pointer-events: auto; /* Enable clicking */
+        background: linear-gradient(135deg, #2196F3, #21CBF3);
         color: white;
         border: 4px solid white;
-        padding: 20px 60px;
-        font-size: 24px;
+        padding: 20px 80px; /* Wider button */
+        font-size: 28px;
         font-weight: 800;
         border-radius: 50px;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-family: sans-serif;
         text-transform: uppercase;
         box-shadow: 0px 5px 15px rgba(0,0,0,0.5);
-        margin-bottom: 40px;
+        margin-bottom: 50px;
         transition: transform 0.1s;
         cursor: pointer;
-        display: none; /* Hidden until model loads */
       }
 
       #jump-btn:active {
         transform: scale(0.95);
-        background: #c2185b;
+        background: #1976D2;
       }
       
-      /* Status Message (Loading / Game Over) */
+      /* Status Message */
       #status-msg {
         pointer-events: auto;
         background: rgba(0, 0, 0, 0.6);
@@ -66,9 +61,8 @@
         margin-bottom: 20px;
         font-family: sans-serif;
         font-weight: bold;
-        font-size: 16px;
+        font-size: 18px;
         text-align: center;
-        display: block;
       }
     </style>
 
@@ -117,50 +111,19 @@
         }
       });
 
-      // --- COMPONENT 2: PLAYER JUMP LOGIC ---
+      // --- COMPONENT 2: PLAYER PHYSICS (JUMP) ---
       AFRAME.registerComponent('player-jump', {
         schema: {
           isJumping: { type: 'boolean', default: false },
-          groundY: { type: 'number', default: 0 }
+          groundY: { type: 'number', default: 0 },
+          jumpPower: { type: 'number', default: 0.04 }, // CONTROL JUMP HEIGHT HERE
+          gravity: { type: 'number', default: -0.002 }   // CONTROL FALL SPEED HERE
         },
 
         init: function() {
           this.velocity = 0;
-          this.gravity = -0.003; 
-          this.jumpPower = 0.08;
           this.isDead = false;
-          this.isModelLoaded = false;
           
-          const statusMsg = document.querySelector('#status-msg');
-          const jumpBtn = document.querySelector('#jump-btn');
-
-          // 1. Success Listener
-          this.el.addEventListener('model-loaded', () => {
-             console.log("Robot loaded successfully");
-             this.isModelLoaded = true;
-             
-             if(statusMsg) statusMsg.innerText = "Game Ready! Avoid Red Boxes!";
-             if(jumpBtn) jumpBtn.style.display = 'block';
-             
-             this.startRun();
-          });
-
-          // 2. Error Listener (Fallback)
-          this.el.addEventListener('model-error', (e) => {
-            console.error("Error loading model", e);
-            
-            // Create fallback geometry if model fails
-            if (!this.isModelLoaded) {
-                this.el.setAttribute('geometry', 'primitive: box; width: 0.1; height: 0.2; depth: 0.1');
-                this.el.setAttribute('material', 'color: blue');
-                // Remove the failed GLTF attribute to stop it from trying to load
-                this.el.removeAttribute('gltf-model');
-                
-                if(statusMsg) statusMsg.innerHTML = "Model Failed (Network/CORS).<br>Using Fallback Box.";
-                if(jumpBtn) jumpBtn.style.display = 'block';
-            }
-          });
-
           // Bind Jump Button
           const btn = document.querySelector('#jump-btn');
           if (btn) {
@@ -172,53 +135,24 @@
             btn.addEventListener('click', jumpAction);
             btn.addEventListener('touchstart', jumpAction);
           }
-          
-          // Protocol Check Warning
-          if (window.location.protocol === 'file:') {
-             if(statusMsg) statusMsg.innerText = "Warning: file:// protocol blocks 3D models. Use a local server.";
-          }
-        },
-
-        startRun: function() {
-          if(this.isDead || !this.isModelLoaded) return;
-          this.el.setAttribute('animation-mixer', {
-            clip: 'Running',
-            loop: 'repeat',
-            crossFadeDuration: 0.3
-          });
         },
 
         triggerJump: function() {
           if (this.data.isJumping || this.isDead) return;
           
           this.data.isJumping = true;
-          this.velocity = this.jumpPower;
+          this.velocity = this.data.jumpPower;
           
-          if(this.isModelLoaded) {
-              this.el.setAttribute('animation-mixer', {
-                clip: 'Jump',
-                loop: 'once',
-                clampWhenFinished: true,
-                crossFadeDuration: 0.2
-              });
-          }
+          // Visual flair: Rotate slightly when jumping
+          this.el.setAttribute('rotation', '0 0 15');
         },
 
         setDead: function() {
           if(this.isDead) return;
           this.isDead = true;
-          
-          if(this.isModelLoaded) {
-              this.el.setAttribute('animation-mixer', {
-                clip: 'Death',
-                loop: 'once',
-                clampWhenFinished: true
-              });
-          } else {
-              // Fallback visual for death
-              this.el.setAttribute('material', 'color: black');
-              this.el.setAttribute('rotation', '0 0 90');
-          }
+          // Turn black and tip over
+          this.el.setAttribute('material', 'color: black');
+          this.el.setAttribute('rotation', '0 0 90');
         },
 
         tick: function(time, timeDelta) {
@@ -229,24 +163,30 @@
           let currentY = el.object3D.position.y;
           
           // Apply gravity
-          const deltaFrame = timeDelta / 16; // normalize to 60fps
+          // normalize to 60fps (timeDelta usually ~16ms)
+          const deltaFrame = timeDelta / 16; 
+          
           currentY += this.velocity * deltaFrame;
-          this.velocity += this.gravity * deltaFrame;
+          this.velocity += this.data.gravity * deltaFrame;
 
           // Floor Hit Check
           if (currentY <= this.data.groundY) {
             currentY = this.data.groundY;
             this.data.isJumping = false;
             this.velocity = 0;
-            this.startRun(); // Resume running
+            // Reset rotation
+            this.el.setAttribute('rotation', '0 0 0');
           }
 
           el.object3D.position.y = currentY;
         }
       });
 
-      // --- COMPONENT 3: GAME MANAGER (Spawns Obstacles) ---
+      // --- COMPONENT 3: GAME MANAGER (OBSTACLES) ---
       AFRAME.registerComponent('game-manager', {
+        schema: {
+           speed: { type: 'number', default: 0.02 } // Control obstacle speed
+        },
         init: function() {
           this.timer = 0;
           this.spawnRate = 2500;
@@ -261,7 +201,7 @@
 
           // Find player safely
           if (!this.playerEl) {
-            this.playerEl = document.querySelector('#robot-model');
+            this.playerEl = document.querySelector('#player-model');
             return;
           }
 
@@ -281,14 +221,16 @@
             const obs = this.obstacles[i];
             
             // Move Left
-            obs.object3D.position.x -= 0.02 * (timeDelta / 16);
+            obs.object3D.position.x -= this.data.speed * (timeDelta / 16);
 
-            // Distance Check
+            // Collision Detection
+            // Using a larger threshold now that the player box is bigger
             const distX = Math.abs(obs.object3D.position.x - playerPos.x);
             const distY = Math.abs(obs.object3D.position.y - playerPos.y);
 
-            // Hitbox
-            if (distX < 0.15 && distY < 0.15) {
+            // Hitbox: Player width (0.25) + Obstacle width (0.15) approx / 2
+            // Threshold 0.2 works well for these sizes
+            if (distX < 0.2 && distY < 0.2) {
               this.gameOver();
             }
 
@@ -302,10 +244,13 @@
         },
 
         spawnObstacle: function() {
-          const el = document.createElement('a-entity');
-          el.setAttribute('geometry', 'primitive: box; width: 0.15; height: 0.15; depth: 0.15');
-          el.setAttribute('material', 'color: red');
-          el.setAttribute('position', '1.5 0 0'); // Spawn on right
+          const el = document.createElement('a-box');
+          // Obstacle settings
+          el.setAttribute('color', 'red');
+          el.setAttribute('depth', '0.15');
+          el.setAttribute('height', '0.15');
+          el.setAttribute('width', '0.15');
+          el.setAttribute('position', '1.5 0 0'); 
           
           this.el.appendChild(el);
           this.obstacles.push(el);
@@ -315,7 +260,7 @@
           this.isPlaying = false;
           if (this.msgEl) {
             this.msgEl.style.display = 'block';
-            this.msgEl.innerHTML = "CRASH! <br> Reload page to play again.";
+            this.msgEl.innerHTML = "GAME OVER! <br> Reload page to play again.";
           }
           if (this.playerEl && this.playerEl.components['player-jump']) {
             this.playerEl.components['player-jump'].setDead();
@@ -332,14 +277,13 @@
         if(exampleTarget && content) {
           
           exampleTarget.addEventListener("targetFound", event => {
-            console.log("Target Found");
             content.components['follow-target'].startTracking();
             if(uiLayer) uiLayer.style.display = 'flex';
           });
 
           exampleTarget.addEventListener("targetLost", event => {
-            console.log("Target Lost");
             content.components['follow-target'].stopTracking();
+            // Optional: Hide UI on loss, currently kept visible
           });
         }
       });
@@ -348,7 +292,7 @@
   <body>
     <!-- 2D UI Layer -->
     <div id="ui-layer">
-      <div id="status-msg">Scanning... Point at image.</div>
+      <div id="status-msg">Scan Image to Play</div>
       <div id="jump-btn">JUMP</div>
     </div>
 
@@ -366,9 +310,9 @@
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- LIGHTS (Crucial for visibility!) -->
+      <!-- Lighting -->
       <a-light type="ambient" intensity="1"></a-light>
-      <a-light type="directional" position="1 2 1" intensity="1.5" castShadow="false"></a-light>
+      <a-light type="directional" position="1 2 1" intensity="1.5"></a-light>
 
       <!-- Target -->
       <a-entity id="example-target" mindar-image-target="targetIndex: 0"></a-entity>
@@ -378,23 +322,27 @@
         id="persistent-content" 
         visible="false" 
         follow-target="target: #example-target"
-        game-manager>
+        game-manager="speed: 0.02">
         
-        <!-- Floor (Invisible collider floor, purely for reference) -->
-        <!-- Changed color to white and low opacity, so it's not a black box -->
-        <a-plane color="#FFF" rotation="-90 0 0" width="10" height="2" position="0 -0.01 0" opacity="0.1" transparent="true"></a-plane>
+        <!-- Floor reference -->
+        <a-plane color="#FFF" rotation="-90 0 0" width="10" height="2" position="0 -0.076 0" opacity="0.1" transparent="true"></a-plane>
 
-        <!-- Player Model -->
-        <!-- Reverted to the most stable CDN link for A-Frame extras -->
-        <a-entity 
-          id="robot-model"
-          gltf-model="https://cdn.jsdelivr.net/gh/DonMcCurdy/aframe-extras@v6.1.1/assets/robot.glb" 
-          crossorigin="anonymous"
-          scale="0.1 0.1 0.1"
-          rotation="0 90 0" 
-          position="-0.3 0 0" 
-          player-jump
-        ></a-entity> 
+        <!-- PLAYER (The Blue Box) -->
+        <!-- 
+             scale removed in favor of direct geometry attributes for easier sizing 
+             depth/height/width: 0.25 (Controls size)
+             jumpPower: 0.04 (Controls jump height)
+             gravity: -0.002 (Controls fall speed)
+        -->
+        <a-box 
+          id="player-model"
+          color="#2196F3"
+          depth="0.25" 
+          height="0.25" 
+          width="0.25"
+          position="-0.5 0.05 0" 
+          player-jump="jumpPower: 0.04; gravity: -0.002"
+        ></a-box> 
         
       </a-entity>
 
