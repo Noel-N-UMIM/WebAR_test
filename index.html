@@ -11,7 +11,7 @@
         schema: {
           target: { type: 'selector' },
           isTracking: { type: 'boolean', default: false },
-          smoothFactor: { type: 'number', default: 0.1 } // 0.1 = smooth/heavy, 1.0 = instant/jittery
+          smoothFactor: { type: 'number', default: 1.0 } // 0.1 = smooth/heavy, 1.0 = instant/jittery
         },
         
         init: function() {
@@ -101,7 +101,7 @@
     <!-- missTolerance: 10 -> Wait 10 frames before deciding target is lost (prevents flickering). -->
     <!-- warmupTolerance: 5 -> Wait 5 frames before deciding target is found (prevents false positives). -->
     <a-scene 
-      mindar-image="imageTargetSrc: targets.mind; uiScanning: no; missTolerance: 10; warmupTolerance: 5;" 
+      mindar-image="imageTargetSrc: targets.mind; uiScanning: no; missTolerance: 5; warmupTolerance: 1;" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
@@ -133,3 +133,4 @@
     </a-scene>
   </body>
 </html>
+
