@@ -129,23 +129,36 @@
           this.gravity = -0.003; 
           this.jumpPower = 0.08;
           this.isDead = false;
+          this.isModelLoaded = false;
           
           const statusMsg = document.querySelector('#status-msg');
           const jumpBtn = document.querySelector('#jump-btn');
 
-          // Wait for model to load
+          // 1. Success Listener
           this.el.addEventListener('model-loaded', () => {
              console.log("Robot loaded successfully");
-             // Update UI
+             this.isModelLoaded = true;
+             
              if(statusMsg) statusMsg.innerText = "Game Ready! Avoid Red Boxes!";
              if(jumpBtn) jumpBtn.style.display = 'block';
              
              this.startRun();
           });
 
+          // 2. Error Listener (Fallback)
           this.el.addEventListener('model-error', (e) => {
             console.error("Error loading model", e);
-            if(statusMsg) statusMsg.innerText = "Error loading 3D Model. Check Internet.";
+            
+            // Create fallback geometry if model fails
+            if (!this.isModelLoaded) {
+                this.el.setAttribute('geometry', 'primitive: box; width: 0.1; height: 0.2; depth: 0.1');
+                this.el.setAttribute('material', 'color: blue');
+                // Remove the failed GLTF attribute to stop it from trying to load
+                this.el.removeAttribute('gltf-model');
+                
+                if(statusMsg) statusMsg.innerHTML = "Model Failed (Network/CORS).<br>Using Fallback Box.";
+                if(jumpBtn) jumpBtn.style.display = 'block';
+            }
           });
 
           // Bind Jump Button
@@ -159,10 +172,15 @@
             btn.addEventListener('click', jumpAction);
             btn.addEventListener('touchstart', jumpAction);
           }
+          
+          // Protocol Check Warning
+          if (window.location.protocol === 'file:') {
+             if(statusMsg) statusMsg.innerText = "Warning: file:// protocol blocks 3D models. Use a local server.";
+          }
         },
 
         startRun: function() {
-          if(this.isDead) return;
+          if(this.isDead || !this.isModelLoaded) return;
           this.el.setAttribute('animation-mixer', {
             clip: 'Running',
             loop: 'repeat',
@@ -176,22 +194,31 @@
           this.data.isJumping = true;
           this.velocity = this.jumpPower;
           
-          this.el.setAttribute('animation-mixer', {
-            clip: 'Jump',
-            loop: 'once',
-            clampWhenFinished: true,
-            crossFadeDuration: 0.2
-          });
+          if(this.isModelLoaded) {
+              this.el.setAttribute('animation-mixer', {
+                clip: 'Jump',
+                loop: 'once',
+                clampWhenFinished: true,
+                crossFadeDuration: 0.2
+              });
+          }
         },
 
         setDead: function() {
           if(this.isDead) return;
           this.isDead = true;
-          this.el.setAttribute('animation-mixer', {
-            clip: 'Death',
-            loop: 'once',
-            clampWhenFinished: true
-          });
+          
+          if(this.isModelLoaded) {
+              this.el.setAttribute('animation-mixer', {
+                clip: 'Death',
+                loop: 'once',
+                clampWhenFinished: true
+              });
+          } else {
+              // Fallback visual for death
+              this.el.setAttribute('material', 'color: black');
+              this.el.setAttribute('rotation', '0 0 90');
+          }
         },
 
         tick: function(time, timeDelta) {
@@ -358,10 +385,10 @@
         <a-plane color="#FFF" rotation="-90 0 0" width="10" height="2" position="0 -0.01 0" opacity="0.1" transparent="true"></a-plane>
 
         <!-- Player Model -->
-        <!-- UPDATED URL to a reliable CDN source -->
+        <!-- Reverted to the most stable CDN link for A-Frame extras -->
         <a-entity 
           id="robot-model"
-          gltf-model="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/examples/assets/robot.glb"
+          gltf-model="https://cdn.jsdelivr.net/gh/DonMcCurdy/aframe-extras@v6.1.1/assets/robot.glb" 
           crossorigin="anonymous"
           scale="0.1 0.1 0.1"
           rotation="0 90 0" 
