@@ -86,7 +86,7 @@
       - warmupTolerance: 5 (Prevents false positives)
     -->
     <a-scene 
-      mindar-image="imageTargetSrc: targets.mind; uiScanning: no; missTolerance: 10; warmupTolerance: 5;" 
+      mindar-image="imageTargetSrc: ./targets.mind; uiScanning: no; missTolerance: 3; warmupTolerance: 2;" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
@@ -100,7 +100,7 @@
       <!-- 
         CAMERA UPDATE:
         1. look-controls="enabled: true" -> Enables the Gyroscope/Motion Sensors
-        2. mouseEnabled: false / touchEnabled: false -> Prevents user from accidentally dragging the screen and rotating the world manually
+        2. mouseEnabled: false / touchEnabled: true -> Prevents user from accidentally dragging the screen and rotating the world manually
       -->
       <a-camera position="0 0 0" look-controls="enabled: true; mouseEnabled: false; touchEnabled: false;">
         
@@ -126,3 +126,4 @@
     </a-scene>
   </body>
 </html>
+
