@@ -22,7 +22,7 @@
         height: 100%;
         pointer-events: none; /* Let clicks pass through to 3D scene */
         z-index: 999;
-        display: none; /* Hidden until AR target is found */
+        display: flex; /* CHANGED: Visible by default so user sees "Scan" message */
         flex-direction: column;
         justify-content: flex-end;
         align-items: center;
@@ -44,6 +44,7 @@
         margin-bottom: 50px;
         transition: transform 0.1s;
         cursor: pointer;
+        display: none; /* Hidden until target found */
       }
 
       #jump-btn:active {
@@ -202,8 +203,8 @@
           if (!this.isPlaying) return;
           
           // IMPORTANT FIX: Stop game loop if AR content is hidden (target lost)
-          // This prevents obstacles from spawning/moving while user is scanning
-          if (this.el.getAttribute('visible') === false) {
+          // We use object3D.visible which is the Three.js reliable property
+          if (!this.el.object3D.visible) {
              return; 
           }
 
@@ -252,15 +253,21 @@
         },
 
         spawnObstacle: function() {
-          console.log("Spawning Obstacle");
-          const el = document.createElement('a-box');
-          // Obstacle settings
-          el.setAttribute('color', '#FF0000'); // Bright Red
-          el.setAttribute('depth', '0.25');  // Larger (same size as player)
-          el.setAttribute('height', '0.25'); // Larger
-          el.setAttribute('width', '0.25');  // Larger
+          console.log("Spawning Red Cube Obstacle");
           
-          // Start closer (1.0 instead of 1.5) so it's immediately visible
+          // Create entity
+          const el = document.createElement('a-entity');
+          
+          // Define as a Red Box (Cube)
+          el.setAttribute('geometry', {
+            primitive: 'box',
+            width: 0.25,
+            height: 0.25,
+            depth: 0.25
+          });
+          el.setAttribute('material', 'color: red'); // Bright Red
+          
+          // Start position
           el.setAttribute('position', '1.0 0 0'); 
           
           this.el.appendChild(el);
@@ -285,19 +292,27 @@
         const exampleTarget = document.querySelector('#example-target');
         const content = document.querySelector('#persistent-content');
         const uiLayer = document.querySelector('#ui-layer');
+        const jumpBtn = document.querySelector('#jump-btn');
+        const statusMsg = document.querySelector('#status-msg');
 
         if(exampleTarget && content) {
           
           exampleTarget.addEventListener("targetFound", event => {
             console.log("Target Found - Game Resuming");
             content.components['follow-target'].startTracking();
-            if(uiLayer) uiLayer.style.display = 'flex';
+            
+            // UPDATE UI for Game State
+            if(jumpBtn) jumpBtn.style.display = 'block';
+            if(statusMsg) statusMsg.innerHTML = "Dodge the Red Cubes!";
           });
 
           exampleTarget.addEventListener("targetLost", event => {
             console.log("Target Lost - Game Paused");
             content.components['follow-target'].stopTracking();
-            // Optional: Hide UI on loss, currently kept visible
+            
+            // UPDATE UI for Scan State
+            if(jumpBtn) jumpBtn.style.display = 'none';
+            if(statusMsg) statusMsg.innerHTML = "Target Lost. Scan Image to Resume.";
           });
         }
       });
