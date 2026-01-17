@@ -6,32 +6,65 @@
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
     <script>
-      // 1. Register Component
+      // 1. Register Component with Smart Smoothing
       AFRAME.registerComponent('follow-target', {
         schema: {
           target: { type: 'selector' },
-          isTracking: { type: 'boolean', default: false }
+          isTracking: { type: 'boolean', default: false },
+          smoothFactor: { type: 'number', default: 0.1 } // 0.1 = smooth/heavy, 1.0 = instant/jittery
         },
-        tick: function () {
+        
+        init: function() {
+          // Initialize helper vectors to avoid garbage collection overhead
+          this.targetPos = new THREE.Vector3();
+          this.targetQuat = new THREE.Quaternion();
+          this.targetScale = new THREE.Vector3();
+        },
+
+        tick: function (time, timeDelta) {
           // If tracking is off or target isn't visible, do nothing
           if (!this.data.isTracking) return;
           
-          // We check target visibility carefully
           const targetEl = this.data.target;
           if (!targetEl || !targetEl.object3D.visible) return;
 
-          // COPY coordinates from Target -> PASTE to Content
-          const targetObj = targetEl.object3D;
           const elObj = this.el.object3D;
-          
-          targetObj.getWorldPosition(elObj.position);
-          targetObj.getWorldQuaternion(elObj.quaternion);
-          targetObj.getWorldScale(elObj.scale);
+          const targetObj = targetEl.object3D;
+
+          // 1. READ: Get the new raw data from the scanner
+          targetObj.getWorldPosition(this.targetPos);
+          targetObj.getWorldQuaternion(this.targetQuat);
+          targetObj.getWorldScale(this.targetScale);
+
+          // 2. CHECK: Distance snap
+          // If the object is extremely far away (e.g., first frame), snap instantly.
+          // Otherwise, smooth.
+          const dist = elObj.position.distanceTo(this.targetPos);
+          if (dist > 2) {
+             // Snap instantly if far (prevents "flying in" from zero)
+             elObj.position.copy(this.targetPos);
+             elObj.quaternion.copy(this.targetQuat);
+             elObj.scale.copy(this.targetScale);
+          } else {
+             // 3. SMOOTH: "Educated Guess" Logic
+             // We use Lerp (Linear Interpolation) and Slerp (Spherical Interpolation).
+             // By moving only 10% (0.1) per frame, we filter out high-frequency noise (jitter).
+             // If the scanner mistakenly reports a "vertical" angle for 1-2 frames, 
+             // this logic will barely rotate the model before the scanner corrects itself.
+             
+             const factor = this.data.smoothFactor;
+             
+             elObj.position.lerp(this.targetPos, factor);
+             elObj.quaternion.slerp(this.targetQuat, factor);
+             elObj.scale.lerp(this.targetScale, factor);
+          }
         },
+        
         startTracking: function () {
           this.data.isTracking = true;
           this.el.setAttribute('visible', 'true');
         },
+        
         stopTracking: function () {
           this.data.isTracking = false;
           // We do NOT hide it here, so it stays "frozen" at last known spot
@@ -63,9 +96,12 @@
     </script>
   </head>
   <body>
-    <!-- CHANGED: Removed './' from path, just 'targets.mind' is sufficient if in same folder -->
+    <!-- CHANGED: Updated mindar-image settings to improve tracking tolerance and remove restricted UI -->
+    <!-- uiScanning: no -> Removes the small "square" overlay so users know they can scan anywhere. -->
+    <!-- missTolerance: 10 -> Wait 10 frames before deciding target is lost (prevents flickering). -->
+    <!-- warmupTolerance: 5 -> Wait 5 frames before deciding target is found (prevents false positives). -->
     <a-scene 
-      mindar-image="imageTargetSrc: targets.mind;" 
+      mindar-image="imageTargetSrc: targets.mind; uiScanning: no; missTolerance: 10; warmupTolerance: 5;" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
