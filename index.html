@@ -82,8 +82,8 @@
     <!-- 
       MindAR Settings:
       - uiScanning: no (Hides the square box)
-      - missTolerance: 10 (Keeps content longer if signal is weak)
-      - warmupTolerance: 5 (Prevents false positives)
+      - missTolerance: 3 (Keeps content longer if signal is weak)
+      - warmupTolerance: 2 (Prevents false positives)
     -->
     <a-scene 
       mindar-image="imageTargetSrc: ./targets.mind; uiScanning: no; missTolerance: 3; warmupTolerance: 2;" 
@@ -102,7 +102,7 @@
         1. look-controls="enabled: true" -> Enables the Gyroscope/Motion Sensors
         2. mouseEnabled: false / touchEnabled: true -> Prevents user from accidentally dragging the screen and rotating the world manually
       -->
-      <a-camera position="0 0 0" look-controls="enabled: true; mouseEnabled: false; touchEnabled: false;">
+      <a-camera position="0 0 0" look-controls="enabled: false; mouseEnabled: false; touchEnabled: true;">
         
         <!-- 
            HIERARCHY UPDATE:
@@ -126,4 +126,5 @@
     </a-scene>
   </body>
 </html>
+
 
