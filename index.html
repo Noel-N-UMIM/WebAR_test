@@ -202,7 +202,6 @@
         tick: function(time, timeDelta) {
           if (!this.isPlaying) return;
           
-          // REMOVED VISIBILITY CHECK
           // Game loop runs even if target is lost, ensuring obstacles spawn in background
 
           // Find player safely
@@ -256,20 +255,18 @@
         spawnObstacle: function() {
           // console.log("Spawning Red Cube Obstacle");
           
-          // Create entity
-          const el = document.createElement('a-entity');
+          // Create entity using a-box for guaranteed visibility matches
+          const el = document.createElement('a-box');
           
-          // Define as a Red Box (Cube)
-          el.setAttribute('geometry', {
-            primitive: 'box',
-            width: 0.25,
-            height: 0.25,
-            depth: 0.25
-          });
-          el.setAttribute('material', 'color: red'); // Bright Red
+          // Explicit attributes for Size and Color
+          el.setAttribute('width', '0.25');
+          el.setAttribute('height', '0.25');
+          el.setAttribute('depth', '0.25');
+          el.setAttribute('color', 'red'); 
           
-          // Start position
-          el.setAttribute('position', '1.0 0 0'); 
+          // Start position: Moved from 1.0 to 0.5 to be closer to player (-0.3)
+          // This ensures it spawns clearly within view
+          el.setAttribute('position', '0.5 0 0'); 
           
           this.el.appendChild(el);
           this.obstacles.push(el);
@@ -366,7 +363,7 @@
         -->
         <a-box 
           id="player-model"
-          color="#52F27A"
+          color="#2196F3"
           depth="0.25" 
           height="0.25" 
           width="0.25"
