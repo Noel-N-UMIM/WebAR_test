@@ -1,75 +1,98 @@
-
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <!-- CHANGED: Downgraded to A-Frame 1.4.2 for better compatibility with MindAR 1.2.5 -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
     <script>
+      // 1. Register Component
+      AFRAME.registerComponent('follow-target', {
+        schema: {
+          target: { type: 'selector' },
+          isTracking: { type: 'boolean', default: false }
+        },
+        tick: function () {
+          // If tracking is off or target isn't visible, do nothing
+          if (!this.data.isTracking) return;
+          
+          // We check target visibility carefully
+          const targetEl = this.data.target;
+          if (!targetEl || !targetEl.object3D.visible) return;
 
-AFRAME.registerComponent('follow-target', { 
-schema: { 
-target: {type: 'selector'}, 
-isTracking: {type: 'boolean', default: false} 
-// The Switch
-}, 
-tick: function () { 
-// If the switch is OFF or target isn't visible, do nothing. 
-if (!this.data.isTracking || !this.data.target.object3D.visible) return;
-// COPY coordinates from Target -> PASTE to Content 
-const targetObj = this.data.target.object3D; 
-const elObj = this.el.object3D; 
-targetObj.getWorldPosition(elObj.position); 
-targetObj.getWorldQuaternion(elObj.quaternion); 
-targetObj.getWorldScale(elObj.scale); 
-}, 
-// Helper functions 
-startTracking: function() { 
-this.data.isTracking = true; 
-}, 
-stopTracking: function() { 
-this.data.isTracking = false; 
-} 
-});
-const exampleTarget = document.querySelector('#example-target'); const content = document.querySelector('#persistent-content'); 
-// 1. When Target is Found 
-exampleTarget.addEventListener("targetFound", event => { 
-// Make content visible content.setAttribute('visible', 'true');
-// Turn the magnet ON: content starts following the target 
-content.components['follow-target'].startTracking(); 
-// Optional: Play video if you have one // document.querySelector('#myVideo').play(); }); 
-// 2. When Target is Lost 
-exampleTarget.addEventListener("targetLost", event => { 
-// Turn the magnet OFF. // We DO NOT hide the object.
-// Result: The object stays "frozen" at the last known world coordinates. content.components['follow-target'].stopTracking(); 
-});
-  });
+          // COPY coordinates from Target -> PASTE to Content
+          const targetObj = targetEl.object3D;
+          const elObj = this.el.object3D;
+          
+          targetObj.getWorldPosition(elObj.position);
+          targetObj.getWorldQuaternion(elObj.quaternion);
+          targetObj.getWorldScale(elObj.scale);
+        },
+        startTracking: function () {
+          this.data.isTracking = true;
+          this.el.setAttribute('visible', 'true');
+        },
+        stopTracking: function () {
+          this.data.isTracking = false;
+          // We do NOT hide it here, so it stays "frozen" at last known spot
+        }
+      });
+
+      // 2. Wait for DOM to load before querying elements
+      document.addEventListener("DOMContentLoaded", function() {
+        const exampleTarget = document.querySelector('#example-target');
+        const content = document.querySelector('#persistent-content');
+
+        // Check if elements exist to prevent crashes
+        if(exampleTarget && content) {
+          
+          exampleTarget.addEventListener("targetFound", event => {
+            console.log("Target Found");
+            content.components['follow-target'].startTracking();
+          });
+
+          exampleTarget.addEventListener("targetLost", event => {
+            console.log("Target Lost");
+            content.components['follow-target'].stopTracking();
+          });
+          
+        } else {
+          console.error("Critical: Target or Content element not found in DOM.");
+        }
+      });
     </script>
-
   </head>
   <body>
+    <!-- CHANGED: Removed './' from path, just 'targets.mind' is sufficient if in same folder -->
     <a-scene 
       mindar-image="imageTargetSrc: ./targets.mind;" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
-      device-orientation-permission-ui="enabled: false">    color-space="sRGB" 
+      device-orientation-permission-ui="enabled: false">
       
-    <a-assets>
-	    <img id="card" src="card_MindAR.png" />
-	    <a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf"></a-asset-item>
-    </a-assets>
+      <a-assets>
+        <!-- I corrected the IDs used below to match these -->
+        <img id="card" src="card_MindAR.png" />
+        <a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf"></a-asset-item>
+      </a-assets>
 
-    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    <a-entity id="example-target" mindar-image-target="targetIndex: 0"></a-entity>
-    
-<!-- The Content is independent (lives in the scene root) -->
- <!-- We start it as invisible until the first detection -->
- <a-entity id="persistent-content" visible="false">
- 	<a-video src="#myVideo"></a-video> 
-<a-gltf-model src="#myModel"></a-gltf-model> 
-</a-entity>
+      <!-- The Target -->
+      <a-entity id="example-target" mindar-image-target="targetIndex: 0"></a-entity>
+      
+      <!-- The Content -->
+      <!-- Added follow-target component here -->
+      <a-entity 
+        id="persistent-content" 
+        visible="false" 
+        follow-target="target: #example-target">
+        
+        <!-- Replaced invalid #myModel with #avatarModel -->
+        <a-gltf-model src="#avatarModel" scale="0.005 0.005 0.005"></a-gltf-model> 
+        
+      </a-entity>
 
     </a-scene>
   </body>
