@@ -4,10 +4,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MindAR Interactive Game</title>
     
-    <!-- 1. Load A-Frame 1.4.2 -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     
-    <!-- 2. Load MindAR 1.2.5 -->
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
     <style>
@@ -184,6 +182,7 @@
       });
 
       // --- COMPONENT 3: GAME MANAGER (OBSTACLES) ---
+      // *** FIX APPLIED HERE ***
       AFRAME.registerComponent('game-manager', {
         schema: {
            speed: { type: 'number', default: 0.02 } // Control obstacle speed
@@ -202,8 +201,6 @@
         tick: function(time, timeDelta) {
           if (!this.isPlaying) return;
           
-          // Game loop runs even if target is lost, ensuring obstacles spawn in background
-
           // Find player safely
           if (!this.playerEl) {
             this.playerEl = document.querySelector('#player-model');
@@ -216,7 +213,7 @@
           if (this.timer > this.spawnRate) {
             this.spawnObstacle();
             this.timer = 0;
-            if (this.spawnRate > 1000) this.spawnRate -= 50; 
+            if (this.spawnRate > 500) this.spawnRate -= 50; // Cap speed increase
           }
 
           // Move & Collide
@@ -224,6 +221,10 @@
           
           for (let i = 0; i < this.obstacles.length; i++) {
             const obs = this.obstacles[i];
+            
+            // *** CRITICAL FIX: Safety Check ***
+            // If the entity hasn't initialized its 3D object yet, skip it.
+            if (!obs.object3D) continue; 
             
             // Move Left
             obs.object3D.position.x -= this.data.speed * (timeDelta / 16);
@@ -233,12 +234,9 @@
             obs.object3D.rotation.y += 0.03;
 
             // Collision Detection
-            // Using a larger threshold now that the player box is bigger
             const distX = Math.abs(obs.object3D.position.x - playerPos.x);
             const distY = Math.abs(obs.object3D.position.y - playerPos.y);
 
-            // Hitbox: Player width (0.25) + Obstacle width (0.15) approx / 2
-            // Threshold 0.2 works well for these sizes
             if (distX < 0.2 && distY < 0.2) {
               this.gameOver();
             }
@@ -253,19 +251,13 @@
         },
 
         spawnObstacle: function() {
-          // console.log("Spawning Red Cube Obstacle");
-          
-          // Create entity using a-box for guaranteed visibility matches
           const el = document.createElement('a-box');
           
-          // Explicit attributes for Size and Color
           el.setAttribute('width', '0.25');
           el.setAttribute('height', '0.25');
           el.setAttribute('depth', '0.25');
           el.setAttribute('color', 'red'); 
           
-          // Start position: Moved from 1.0 to 0.5 to be closer to player (-0.3)
-          // This ensures it spawns clearly within view
           el.setAttribute('position', '0.5 0 0'); 
           
           this.el.appendChild(el);
@@ -317,13 +309,11 @@
     </script>
   </head>
   <body>
-    <!-- 2D UI Layer -->
     <div id="ui-layer">
       <div id="status-msg">Scan Image to Play</div>
       <div id="jump-btn">JUMP</div>
     </div>
 
-    <!-- 3D Scene -->
     <a-scene 
       mindar-image="imageTargetSrc: targets.mind; uiScanning: no; missTolerance: 5; warmupTolerance: 5;" 
       color-space="sRGB" 
@@ -337,30 +327,19 @@
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- Lighting -->
       <a-light type="ambient" intensity="1"></a-light>
       <a-light type="directional" position="1 2 1" intensity="1.5"></a-light>
 
-      <!-- Target -->
       <a-entity id="example-target" mindar-image-target="targetIndex: 0"></a-entity>
       
-      <!-- Content Container -->
       <a-entity 
         id="persistent-content" 
         visible="false" 
         follow-target="target: #example-target"
         game-manager="speed: 0.02">
         
-        <!-- Floor reference -->
         <a-plane color="#FFF" rotation="-90 0 0" width="10" height="2" position="0 -0.126 0" opacity="0.1" transparent="true"></a-plane>
 
-        <!-- PLAYER (The Blue Box) -->
-        <!-- 
-             position: y=0.05 to sit on floor
-             depth/height/width: 0.25 (Controls size)
-             jumpPower: 0.04 (Controls jump height)
-             gravity: -0.002 (Controls fall speed)
-        -->
         <a-box 
           id="player-model"
           color="#2196F3"
