@@ -1,7 +1,6 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- CHANGED: Downgraded to A-Frame 1.4.2 for better compatibility with MindAR 1.2.5 -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
@@ -10,18 +9,17 @@
       AFRAME.registerComponent('follow-target', {
         schema: {
           target: { type: 'selector' },
-          isTracking: { type: 'boolean', default: false }
+          isTracking: { type: 'boolean', default: false },
+          smoothFactor: { type: 'number', default: 0.1 }
         },
         
         init: function() {
-          // Initialize helper vectors to avoid garbage collection overhead
           this.targetPos = new THREE.Vector3();
           this.targetQuat = new THREE.Quaternion();
           this.targetScale = new THREE.Vector3();
         },
 
         tick: function (time, timeDelta) {
-          // If tracking is off or target isn't visible, do nothing
           if (!this.data.isTracking) return;
           
           const targetEl = this.data.target;
@@ -30,38 +28,24 @@
           const elObj = this.el.object3D;
           const targetObj = targetEl.object3D;
 
-          // 1. READ: Get the new raw data from the scanner
+          // 1. READ: Get World Position
+          // Because the Target is now a child of the Camera (which rotates via Gyro),
+          // getWorldPosition() calculates the correct spot in the 3D 'World'
           targetObj.getWorldPosition(this.targetPos);
           targetObj.getWorldQuaternion(this.targetQuat);
           targetObj.getWorldScale(this.targetScale);
 
-          // 2. ADAPTIVE SMOOTHING CALCULATIONS
-          // Calculate distance (error) between current position and target position
+          // 2. SMOOTHING
           const dist = elObj.position.distanceTo(this.targetPos);
-          
-          // variable: lerpFactor
-          // Logic:
-          // - If distance is large (fast movement), we want high lerp (e.g., 0.8) to respond instantly.
-          // - If distance is tiny (jitter/noise), we want low lerp (e.g., 0.02) to stay stable.
-          
-          let lerpFactor = 0.1; // Default
+          let lerpFactor = 0.1;
           
           if (dist > 1.0) {
-             // If extremely far (first frame or lost tracking recovery), snap instantly
-             lerpFactor = 1.0;
+             lerpFactor = 1.0; // Snap instantly if far
           } else {
-             // Create a curve: Multiply distance by sensitivity
-             // e.g., 10cm error (0.1) * 10 = 1.0 (Instant)
-             // e.g., 1cm error (0.01) * 10 = 0.1 (Smooth)
              lerpFactor = dist * 10;
-             
-             // Clamp the value to keep it sane
-             // Minimum 0.02: Super heavy smoothing when barely moving (fixes the tilt jitter)
-             // Maximum 0.8: Fast response when moving intentionally
              lerpFactor = Math.min(Math.max(lerpFactor, 0.02), 0.8);
           }
 
-          // 3. APPLY with the dynamic factor
           elObj.position.lerp(this.targetPos, lerpFactor);
           elObj.quaternion.slerp(this.targetQuat, lerpFactor);
           elObj.scale.lerp(this.targetScale, lerpFactor);
@@ -74,39 +58,33 @@
         
         stopTracking: function () {
           this.data.isTracking = false;
-          // We do NOT hide it here, so it stays "frozen" at last known spot
         }
       });
 
-      // 2. Wait for DOM to load before querying elements
       document.addEventListener("DOMContentLoaded", function() {
         const exampleTarget = document.querySelector('#example-target');
         const content = document.querySelector('#persistent-content');
 
-        // Check if elements exist to prevent crashes
         if(exampleTarget && content) {
-          
           exampleTarget.addEventListener("targetFound", event => {
             console.log("Target Found");
             content.components['follow-target'].startTracking();
           });
-
           exampleTarget.addEventListener("targetLost", event => {
             console.log("Target Lost");
             content.components['follow-target'].stopTracking();
           });
-          
-        } else {
-          console.error("Critical: Target or Content element not found in DOM.");
         }
       });
     </script>
   </head>
   <body>
-    <!-- CHANGED: Updated mindar-image settings to improve tracking tolerance and remove restricted UI -->
-    <!-- uiScanning: no -> Removes the small "square" overlay so users know they can scan anywhere. -->
-    <!-- missTolerance: 10 -> Wait 10 frames before deciding target is lost (prevents flickering). -->
-    <!-- warmupTolerance: 5 -> Wait 5 frames before deciding target is found (prevents false positives). -->
+    <!-- 
+      MindAR Settings:
+      - uiScanning: no (Hides the square box)
+      - missTolerance: 10 (Keeps content longer if signal is weak)
+      - warmupTolerance: 5 (Prevents false positives)
+    -->
     <a-scene 
       mindar-image="imageTargetSrc: targets.mind; uiScanning: no; missTolerance: 10; warmupTolerance: 5;" 
       color-space="sRGB" 
@@ -115,26 +93,34 @@
       device-orientation-permission-ui="enabled: false">
       
       <a-assets>
-        <!-- I corrected the IDs used below to match these -->
         <img id="card" src="card_MindAR.png" />
         <a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf"></a-asset-item>
       </a-assets>
 
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-
-      <!-- The Target -->
-      <a-entity id="example-target" mindar-image-target="targetIndex: 0"></a-entity>
+      <!-- 
+        CAMERA UPDATE:
+        1. look-controls="enabled: true" -> Enables the Gyroscope/Motion Sensors
+        2. mouseEnabled: false / touchEnabled: false -> Prevents user from accidentally dragging the screen and rotating the world manually
+      -->
+      <a-camera position="0 0 0" look-controls="enabled: true; mouseEnabled: false; touchEnabled: false;">
+        
+        <!-- 
+           HIERARCHY UPDATE:
+           The Image Target is now INSIDE the Camera.
+           This means the Target moves relative to the Camera.
+           Combined with the Camera moving relative to the World (Gyro),
+           we get true World coordinates for the content.
+        -->
+        <a-entity id="example-target" mindar-image-target="targetIndex: 0"></a-entity>
       
-      <!-- The Content -->
-      <!-- Added follow-target component here -->
+      </a-camera>
+
+      <!-- The Content stays OUTSIDE the camera, in the static world -->
       <a-entity 
         id="persistent-content" 
         visible="false" 
         follow-target="target: #example-target">
-        
-        <!-- Replaced invalid #myModel with #avatarModel -->
         <a-gltf-model src="#avatarModel" scale="0.005 0.005 0.005"></a-gltf-model> 
-        
       </a-entity>
 
     </a-scene>
