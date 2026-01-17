@@ -22,7 +22,7 @@
         height: 100%;
         pointer-events: none; /* Let clicks pass through to 3D scene */
         z-index: 999;
-        display: flex; /* CHANGED: Visible by default so user sees "Scan" message */
+        display: flex; /* Visible by default so user sees "Scan" message */
         flex-direction: column;
         justify-content: flex-end;
         align-items: center;
@@ -202,11 +202,8 @@
         tick: function(time, timeDelta) {
           if (!this.isPlaying) return;
           
-          // IMPORTANT FIX: Stop game loop if AR content is hidden (target lost)
-          // We use object3D.visible which is the Three.js reliable property
-          if (!this.el.object3D.visible) {
-             return; 
-          }
+          // REMOVED VISIBILITY CHECK
+          // Game loop runs even if target is lost, ensuring obstacles spawn in background
 
           // Find player safely
           if (!this.playerEl) {
@@ -231,6 +228,10 @@
             
             // Move Left
             obs.object3D.position.x -= this.data.speed * (timeDelta / 16);
+            
+            // Spin Obstacles (Visual Flair)
+            obs.object3D.rotation.x += 0.02;
+            obs.object3D.rotation.y += 0.03;
 
             // Collision Detection
             // Using a larger threshold now that the player box is bigger
@@ -253,7 +254,7 @@
         },
 
         spawnObstacle: function() {
-          console.log("Spawning Red Cube Obstacle");
+          // console.log("Spawning Red Cube Obstacle");
           
           // Create entity
           const el = document.createElement('a-entity');
@@ -365,7 +366,7 @@
         -->
         <a-box 
           id="player-model"
-          color="#2196F3"
+          color="#52F27A"
           depth="0.25" 
           height="0.25" 
           width="0.25"
