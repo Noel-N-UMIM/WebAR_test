@@ -6,12 +6,11 @@
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
     <script>
-      // 1. Register Component with Smart Smoothing
+      // 1. Register Component with Adaptive Smoothing
       AFRAME.registerComponent('follow-target', {
         schema: {
           target: { type: 'selector' },
-          isTracking: { type: 'boolean', default: false },
-          smoothFactor: { type: 'number', default: 1.0 } // 0.1 = smooth/heavy, 1.0 = instant/jittery
+          isTracking: { type: 'boolean', default: false }
         },
         
         init: function() {
@@ -36,28 +35,36 @@
           targetObj.getWorldQuaternion(this.targetQuat);
           targetObj.getWorldScale(this.targetScale);
 
-          // 2. CHECK: Distance snap
-          // If the object is extremely far away (e.g., first frame), snap instantly.
-          // Otherwise, smooth.
+          // 2. ADAPTIVE SMOOTHING CALCULATIONS
+          // Calculate distance (error) between current position and target position
           const dist = elObj.position.distanceTo(this.targetPos);
-          if (dist > 2) {
-             // Snap instantly if far (prevents "flying in" from zero)
-             elObj.position.copy(this.targetPos);
-             elObj.quaternion.copy(this.targetQuat);
-             elObj.scale.copy(this.targetScale);
+          
+          // variable: lerpFactor
+          // Logic:
+          // - If distance is large (fast movement), we want high lerp (e.g., 0.8) to respond instantly.
+          // - If distance is tiny (jitter/noise), we want low lerp (e.g., 0.02) to stay stable.
+          
+          let lerpFactor = 0.1; // Default
+          
+          if (dist > 1.0) {
+             // If extremely far (first frame or lost tracking recovery), snap instantly
+             lerpFactor = 1.0;
           } else {
-             // 3. SMOOTH: "Educated Guess" Logic
-             // We use Lerp (Linear Interpolation) and Slerp (Spherical Interpolation).
-             // By moving only 10% (0.1) per frame, we filter out high-frequency noise (jitter).
-             // If the scanner mistakenly reports a "vertical" angle for 1-2 frames, 
-             // this logic will barely rotate the model before the scanner corrects itself.
+             // Create a curve: Multiply distance by sensitivity
+             // e.g., 10cm error (0.1) * 10 = 1.0 (Instant)
+             // e.g., 1cm error (0.01) * 10 = 0.1 (Smooth)
+             lerpFactor = dist * 10;
              
-             const factor = this.data.smoothFactor;
-             
-             elObj.position.lerp(this.targetPos, factor);
-             elObj.quaternion.slerp(this.targetQuat, factor);
-             elObj.scale.lerp(this.targetScale, factor);
+             // Clamp the value to keep it sane
+             // Minimum 0.02: Super heavy smoothing when barely moving (fixes the tilt jitter)
+             // Maximum 0.8: Fast response when moving intentionally
+             lerpFactor = Math.min(Math.max(lerpFactor, 0.02), 0.8);
           }
+
+          // 3. APPLY with the dynamic factor
+          elObj.position.lerp(this.targetPos, lerpFactor);
+          elObj.quaternion.slerp(this.targetQuat, lerpFactor);
+          elObj.scale.lerp(this.targetScale, lerpFactor);
         },
         
         startTracking: function () {
@@ -101,7 +108,7 @@
     <!-- missTolerance: 10 -> Wait 10 frames before deciding target is lost (prevents flickering). -->
     <!-- warmupTolerance: 5 -> Wait 5 frames before deciding target is found (prevents false positives). -->
     <a-scene 
-      mindar-image="imageTargetSrc: targets.mind; uiScanning: no; missTolerance: 5; warmupTolerance: 1;" 
+      mindar-image="imageTargetSrc: targets.mind; uiScanning: no; missTolerance: 10; warmupTolerance: 5;" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
@@ -133,4 +140,3 @@
     </a-scene>
   </body>
 </html>
-
