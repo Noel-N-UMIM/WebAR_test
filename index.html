@@ -145,7 +145,7 @@
 
           this.el.addEventListener('model-error', (e) => {
             console.error("Error loading model", e);
-            if(statusMsg) statusMsg.innerText = "Error loading 3D Model.";
+            if(statusMsg) statusMsg.innerText = "Error loading 3D Model. Check Internet.";
           });
 
           // Bind Jump Button
@@ -358,11 +358,11 @@
         <a-plane color="#FFF" rotation="-90 0 0" width="10" height="2" position="0 -0.01 0" opacity="0.1" transparent="true"></a-plane>
 
         <!-- Player Model -->
-        <!-- Increased scale to 0.1 to ensure visibility -->
-        <!-- Added model-loaded listener in component to hide/show UI -->
+        <!-- UPDATED URL to a reliable CDN source -->
         <a-entity 
           id="robot-model"
-          gltf-model="https://cdn.jsdelivr.net/gh/DonMcCurdy/aframe-extras@v6.1.1/assets/robot.glb" 
+          gltf-model="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/examples/assets/robot.glb"
+          crossorigin="anonymous"
           scale="0.1 0.1 0.1"
           rotation="0 90 0" 
           position="-0.3 0 0" 
