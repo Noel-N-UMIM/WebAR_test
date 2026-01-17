@@ -48,6 +48,7 @@
         margin-bottom: 40px;
         transition: transform 0.1s;
         cursor: pointer;
+        display: none; /* Hidden until model loads */
       }
 
       #jump-btn:active {
@@ -55,25 +56,24 @@
         background: #c2185b;
       }
       
-      /* Game Over Message */
+      /* Status Message (Loading / Game Over) */
       #status-msg {
         pointer-events: auto;
-        background: rgba(0, 0, 0, 0.85);
-        color: #ff5252;
-        padding: 15px 25px;
-        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 20px;
         margin-bottom: 20px;
         font-family: sans-serif;
         font-weight: bold;
-        font-size: 18px;
+        font-size: 16px;
         text-align: center;
-        display: none;
-        border: 2px solid #ff5252;
+        display: block;
       }
     </style>
 
     <script>
-      // --- COMPONENT 1: SMOOTH TRACKING (Your original logic) ---
+      // --- COMPONENT 1: SMOOTH TRACKING ---
       AFRAME.registerComponent('follow-target', {
         schema: {
           target: { type: 'selector' },
@@ -130,28 +130,34 @@
           this.jumpPower = 0.08;
           this.isDead = false;
           
-          // Wait for model to load before initializing animations
+          const statusMsg = document.querySelector('#status-msg');
+          const jumpBtn = document.querySelector('#jump-btn');
+
+          // Wait for model to load
           this.el.addEventListener('model-loaded', () => {
-             // console.log("Robot loaded - starting animation");
+             console.log("Robot loaded successfully");
+             // Update UI
+             if(statusMsg) statusMsg.innerText = "Game Ready! Avoid Red Boxes!";
+             if(jumpBtn) jumpBtn.style.display = 'block';
+             
              this.startRun();
+          });
+
+          this.el.addEventListener('model-error', (e) => {
+            console.error("Error loading model", e);
+            if(statusMsg) statusMsg.innerText = "Error loading 3D Model.";
           });
 
           // Bind Jump Button
           const btn = document.querySelector('#jump-btn');
           if (btn) {
-            btn.addEventListener('click', (e) => {
-              e.preventDefault(); // Stop ghost clicks
+            const jumpAction = (e) => {
+              e.preventDefault(); 
               e.stopPropagation();
               this.triggerJump();
-            });
-            // Touch support for mobile
-            btn.addEventListener('touchstart', (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              this.triggerJump();
-            });
-          } else {
-            console.warn("Jump button not found in DOM");
+            };
+            btn.addEventListener('click', jumpAction);
+            btn.addEventListener('touchstart', jumpAction);
           }
         },
 
@@ -220,7 +226,6 @@
           this.obstacles = [];
           this.isPlaying = true;
           this.playerEl = null;
-          
           this.msgEl = document.querySelector('#status-msg');
         },
 
@@ -230,7 +235,7 @@
           // Find player safely
           if (!this.playerEl) {
             this.playerEl = document.querySelector('#robot-model');
-            return; // Skip this frame if player not ready
+            return;
           }
 
           this.timer += timeDelta;
@@ -239,7 +244,7 @@
           if (this.timer > this.spawnRate) {
             this.spawnObstacle();
             this.timer = 0;
-            if (this.spawnRate > 1000) this.spawnRate -= 50; // Speed up
+            if (this.spawnRate > 1000) this.spawnRate -= 50; 
           }
 
           // Move & Collide
@@ -251,8 +256,7 @@
             // Move Left
             obs.object3D.position.x -= 0.02 * (timeDelta / 16);
 
-            // Distance Check (Collision)
-            // Robot is at x: -0.3. Obstacle moves +x to -x
+            // Distance Check
             const distX = Math.abs(obs.object3D.position.x - playerPos.x);
             const distY = Math.abs(obs.object3D.position.y - playerPos.y);
 
@@ -276,7 +280,6 @@
           el.setAttribute('material', 'color: red');
           el.setAttribute('position', '1.5 0 0'); // Spawn on right
           
-          // Attach to the persistent content container (so it follows the card)
           this.el.appendChild(el);
           this.obstacles.push(el);
         },
@@ -304,15 +307,12 @@
           exampleTarget.addEventListener("targetFound", event => {
             console.log("Target Found");
             content.components['follow-target'].startTracking();
-            // Show UI
             if(uiLayer) uiLayer.style.display = 'flex';
           });
 
           exampleTarget.addEventListener("targetLost", event => {
             console.log("Target Lost");
             content.components['follow-target'].stopTracking();
-            // Hide UI
-            // if(uiLayer) uiLayer.style.display = 'none'; // Optional: keep button visible or hide
           });
         }
       });
@@ -321,12 +321,11 @@
   <body>
     <!-- 2D UI Layer -->
     <div id="ui-layer">
-      <div id="status-msg"></div>
+      <div id="status-msg">Scanning... Point at image.</div>
       <div id="jump-btn">JUMP</div>
     </div>
 
     <!-- 3D Scene -->
-    <!-- Reduced missTolerance to standard to ensure tracking starts quickly -->
     <a-scene 
       mindar-image="imageTargetSrc: targets.mind; uiScanning: no; missTolerance: 5; warmupTolerance: 5;" 
       color-space="sRGB" 
@@ -336,10 +335,13 @@
       
       <a-assets>
         <img id="card" src="card_MindAR.png" />
-        <!-- We do NOT preload the glb in a-assets to prevent loading freeze -->
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <!-- LIGHTS (Crucial for visibility!) -->
+      <a-light type="ambient" intensity="1"></a-light>
+      <a-light type="directional" position="1 2 1" intensity="1.5" castShadow="false"></a-light>
 
       <!-- Target -->
       <a-entity id="example-target" mindar-image-target="targetIndex: 0"></a-entity>
@@ -349,18 +351,19 @@
         id="persistent-content" 
         visible="false" 
         follow-target="target: #example-target"
-        game-manager> <!-- Spawns obstacles here -->
+        game-manager>
         
-        <!-- Floor -->
-        <a-plane color="#222" rotation="-90 0 0" width="10" height="2" position="0 -0.01 0" opacity="0.7"></a-plane>
+        <!-- Floor (Invisible collider floor, purely for reference) -->
+        <!-- Changed color to white and low opacity, so it's not a black box -->
+        <a-plane color="#FFF" rotation="-90 0 0" width="10" height="2" position="0 -0.01 0" opacity="0.1" transparent="true"></a-plane>
 
         <!-- Player Model -->
-        <!-- Using standard RobotExpressive from a reliable CDN -->
-        <!-- It supports: 'Idle', 'Walking', 'Running', 'Jump', 'Death', etc. -->
+        <!-- Increased scale to 0.1 to ensure visibility -->
+        <!-- Added model-loaded listener in component to hide/show UI -->
         <a-entity 
           id="robot-model"
           gltf-model="https://cdn.jsdelivr.net/gh/DonMcCurdy/aframe-extras@v6.1.1/assets/robot.glb" 
-          scale="0.05 0.05 0.05"
+          scale="0.1 0.1 0.1"
           rotation="0 90 0" 
           position="-0.3 0 0" 
           player-jump
