@@ -1,28 +1,72 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- CHANGED: Downgraded to A-Frame 1.4.2 for better compatibility with MindAR 1.2.5 -->
+    <title>MindAR Game Example</title>
+    
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
+
+    <style>
+      /* Style for the Jump Button */
+      #ui-layer {
+        position: absolute;
+        bottom: 30px;
+        left: 0;
+        width: 100%;
+        text-align: center;
+        z-index: 100;
+        display: none; /* Hidden until target is found */
+      }
+      
+      #jump-btn {
+        background-color: #ff4081;
+        color: white;
+        border: 4px solid white;
+        padding: 20px 40px;
+        font-size: 24px;
+        font-weight: bold;
+        border-radius: 50px;
+        font-family: sans-serif;
+        text-transform: uppercase;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
+      }
+
+      #jump-btn:active {
+        background-color: #d81b60;
+        transform: scale(0.95);
+      }
+      
+      #game-over-msg {
+        display: none;
+        background: rgba(0,0,0,0.8);
+        color: red;
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        font-family: sans-serif;
+        font-weight: bold;
+      }
+    </style>
 
     <script>
-      // 1. Register Component with Smart Smoothing
+      // --- EXISTING COMPONENT: FOLLOW TARGET (With your smoothing logic) ---
       AFRAME.registerComponent('follow-target', {
         schema: {
           target: { type: 'selector' },
           isTracking: { type: 'boolean', default: false },
-          smoothFactor: { type: 'number', default: 1.0 } // 0.1 = smooth/heavy, 1.0 = instant/jittery
+          smoothFactor: { type: 'number', default: 0.1 } // Adjusted to 0.1 for smoother drift
         },
         
         init: function() {
-          // Initialize helper vectors to avoid garbage collection overhead
           this.targetPos = new THREE.Vector3();
           this.targetQuat = new THREE.Quaternion();
           this.targetScale = new THREE.Vector3();
         },
 
         tick: function (time, timeDelta) {
-          // If tracking is off or target isn't visible, do nothing
           if (!this.data.isTracking) return;
           
           const targetEl = this.data.target;
@@ -31,29 +75,17 @@
           const elObj = this.el.object3D;
           const targetObj = targetEl.object3D;
 
-          // 1. READ: Get the new raw data from the scanner
           targetObj.getWorldPosition(this.targetPos);
           targetObj.getWorldQuaternion(this.targetQuat);
           targetObj.getWorldScale(this.targetScale);
 
-          // 2. CHECK: Distance snap
-          // If the object is extremely far away (e.g., first frame), snap instantly.
-          // Otherwise, smooth.
           const dist = elObj.position.distanceTo(this.targetPos);
           if (dist > 2) {
-             // Snap instantly if far (prevents "flying in" from zero)
              elObj.position.copy(this.targetPos);
              elObj.quaternion.copy(this.targetQuat);
              elObj.scale.copy(this.targetScale);
           } else {
-             // 3. SMOOTH: "Educated Guess" Logic
-             // We use Lerp (Linear Interpolation) and Slerp (Spherical Interpolation).
-             // By moving only 10% (0.1) per frame, we filter out high-frequency noise (jitter).
-             // If the scanner mistakenly reports a "vertical" angle for 1-2 frames, 
-             // this logic will barely rotate the model before the scanner corrects itself.
-             
              const factor = this.data.smoothFactor;
-             
              elObj.position.lerp(this.targetPos, factor);
              elObj.quaternion.slerp(this.targetQuat, factor);
              elObj.scale.lerp(this.targetScale, factor);
@@ -67,39 +99,198 @@
         
         stopTracking: function () {
           this.data.isTracking = false;
-          // We do NOT hide it here, so it stays "frozen" at last known spot
         }
       });
 
-      // 2. Wait for DOM to load before querying elements
+      // --- NEW COMPONENT: PLAYER CONTROLLER (JUMP LOGIC) ---
+      AFRAME.registerComponent('player-jump', {
+        schema: {
+          isJumping: { type: 'boolean', default: false },
+          jumpHeight: { type: 'number', default: 0.5 },
+          groundY: { type: 'number', default: 0 }
+        },
+
+        init: function() {
+          this.velocity = 0;
+          this.gravity = -0.002; // Simple gravity
+          this.jumpPower = 0.08;
+          
+          // Bind button to this component
+          const btn = document.querySelector('#jump-btn');
+          btn.addEventListener('click', () => {
+            this.triggerJump();
+          });
+          
+          // Start running animation
+          this.el.setAttribute('animation-mixer', {
+            clip: 'Running',
+            loop: 'repeat',
+            crossFadeDuration: 0.4
+          });
+        },
+
+        triggerJump: function() {
+          if (this.data.isJumping) return; // Prevent double jumping
+          
+          this.data.isJumping = true;
+          this.velocity = this.jumpPower;
+          
+          // Switch to Jump animation
+          this.el.setAttribute('animation-mixer', {
+            clip: 'Jump',
+            loop: 'once',
+            crossFadeDuration: 0.2
+          });
+        },
+
+        tick: function(time, timeDelta) {
+          if (!this.data.isJumping) return;
+
+          // Physics Logic
+          const el = this.el;
+          let currentY = el.object3D.position.y;
+          
+          // Apply velocity
+          currentY += this.velocity * (timeDelta / 16); // Normalize for framerate
+          this.velocity += this.gravity * (timeDelta / 16);
+
+          // Floor collision
+          if (currentY <= this.data.groundY) {
+            currentY = this.data.groundY;
+            this.data.isJumping = false;
+            this.velocity = 0;
+            
+            // Back to running
+            this.el.setAttribute('animation-mixer', {
+              clip: 'Running',
+              loop: 'repeat',
+              crossFadeDuration: 0.2
+            });
+          }
+
+          el.object3D.position.y = currentY;
+        }
+      });
+
+      // --- NEW COMPONENT: GAME MANAGER (SPAWN OBSTACLES) ---
+      AFRAME.registerComponent('game-manager', {
+        schema: {
+          isPlaying: { type: 'boolean', default: true },
+          speed: { type: 'number', default: 0.02 }
+        },
+
+        init: function() {
+          this.obstacles = [];
+          this.timer = 0;
+          this.spawnRate = 2000; // Spawn every 2 seconds
+          
+          this.player = document.querySelector('#robot-model');
+          this.gameOverMsg = document.querySelector('#game-over-msg');
+        },
+
+        tick: function(time, timeDelta) {
+          if (!this.data.isPlaying) return;
+
+          this.timer += timeDelta;
+          
+          // 1. Spawn Obstacles
+          if (this.timer > this.spawnRate) {
+            this.spawnObstacle();
+            this.timer = 0;
+            // Make game harder over time
+            if (this.spawnRate > 800) this.spawnRate -= 50; 
+          }
+
+          // 2. Move Obstacles & Check Collision
+          for (let i = 0; i < this.obstacles.length; i++) {
+            const obs = this.obstacles[i];
+            const pos = obs.object3D.position;
+            
+            // Move left
+            pos.x -= this.data.speed * (timeDelta / 16);
+
+            // Cleanup if off screen
+            if (pos.x < -1) {
+              obs.parentNode.removeChild(obs);
+              this.obstacles.splice(i, 1);
+              i--;
+              continue;
+            }
+
+            // COLLISION DETECTION
+            // Simple distance check. Adjust distance based on model size.
+            if (this.player) {
+              const playerPos = this.player.object3D.position;
+              
+              // Only check X and Y distance
+              const dx = Math.abs(pos.x - playerPos.x); // Horizontal distance
+              const dy = Math.abs(pos.y - playerPos.y); // Vertical (jump) distance
+              
+              // Hitbox size: 0.2
+              if (dx < 0.15 && dy < 0.2) {
+                this.gameOver();
+              }
+            }
+          }
+        },
+
+        spawnObstacle: function() {
+          const parent = this.el; // Attach to the persistent content so it moves with the card
+          const box = document.createElement('a-box');
+          
+          box.setAttribute('color', 'red');
+          box.setAttribute('scale', '0.15 0.15 0.15');
+          box.setAttribute('position', '1 0 0'); // Start on the right side
+          
+          parent.appendChild(box);
+          this.obstacles.push(box);
+        },
+
+        gameOver: function() {
+          this.data.isPlaying = false;
+          this.gameOverMsg.style.display = 'block';
+          this.gameOverMsg.innerText = "GAME OVER! Reload to restart.";
+          
+          // Play Death Animation
+          this.player.setAttribute('animation-mixer', {
+            clip: 'Death',
+            loop: 'once',
+            clampWhenFinished: true
+          });
+        }
+      });
+
+      // DOM Loaded Listener
       document.addEventListener("DOMContentLoaded", function() {
         const exampleTarget = document.querySelector('#example-target');
         const content = document.querySelector('#persistent-content');
+        const uiLayer = document.querySelector('#ui-layer');
 
-        // Check if elements exist to prevent crashes
         if(exampleTarget && content) {
           
           exampleTarget.addEventListener("targetFound", event => {
             console.log("Target Found");
             content.components['follow-target'].startTracking();
+            uiLayer.style.display = 'block'; // Show Jump Button
           });
 
           exampleTarget.addEventListener("targetLost", event => {
             console.log("Target Lost");
             content.components['follow-target'].stopTracking();
+            // We keep the game running and button visible
+            // If you want to pause the game on loss, you'd access the game-manager component here
           });
           
-        } else {
-          console.error("Critical: Target or Content element not found in DOM.");
         }
       });
     </script>
   </head>
   <body>
-    <!-- CHANGED: Updated mindar-image settings to improve tracking tolerance and remove restricted UI -->
-    <!-- uiScanning: no -> Removes the small "square" overlay so users know they can scan anywhere. -->
-    <!-- missTolerance: 10 -> Wait 10 frames before deciding target is lost (prevents flickering). -->
-    <!-- warmupTolerance: 5 -> Wait 5 frames before deciding target is found (prevents false positives). -->
+    <div id="ui-layer">
+      <div id="game-over-msg"></div>
+      <button id="jump-btn">JUMP</button>
+    </div>
+
     <a-scene 
       mindar-image="imageTargetSrc: targets.mind; uiScanning: no; missTolerance: 3; warmupTolerance: 2;" 
       color-space="sRGB" 
@@ -108,28 +299,3 @@
       device-orientation-permission-ui="enabled: false">
       
       <a-assets>
-        <!-- I corrected the IDs used below to match these -->
-        <img id="card" src="card_MindAR.png" />
-        <a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf"></a-asset-item>
-      </a-assets>
-
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-
-      <!-- The Target -->
-      <a-entity id="example-target" mindar-image-target="targetIndex: 0"></a-entity>
-      
-      <!-- The Content -->
-      <!-- Added follow-target component here -->
-      <a-entity 
-        id="persistent-content" 
-        visible="false" 
-        follow-target="target: #example-target">
-        
-        <!-- Replaced invalid #myModel with #avatarModel -->
-        <a-gltf-model src="#avatarModel" scale="0.005 0.005 0.005"></a-gltf-model> 
-        
-      </a-entity>
-
-    </a-scene>
-  </body>
-</html>
