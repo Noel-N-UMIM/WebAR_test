@@ -239,11 +239,18 @@
         },
 
         spawnObstacle: function() {
-          const el = document.createElement('a-sphere');
+          // Use a-entity with explicit geometry/material to prevent rendering glitches
+          const el = document.createElement('a-entity');
           el.setAttribute('class', 'obstacle');
-          el.setAttribute('radius', '0.15'); // 30cm diameter
-          el.setAttribute('color', '#FF0000'); // Red
-          el.setAttribute('position', '1.5 0.15 0'); // Start to the right
+          
+          // Explicitly define geometry
+          el.setAttribute('geometry', 'primitive: sphere; radius: 0.15');
+          
+          // Use 'flat' shader to ensure visibility regardless of lighting conditions/updates
+          el.setAttribute('material', 'color: #FF0000; shader: flat');
+          
+          // Set initial position
+          el.setAttribute('position', '1.5 0.15 0'); 
           
           // Important: Append to gameContainer so it moves relative to the marker
           this.gameContainer.appendChild(el);
@@ -264,8 +271,6 @@
 
           // 2. Move Obstacles & Check Collision
           const playerPos = this.player.object3D.position;
-          // Use world position for more accurate distance checks usually, 
-          // but since they share a parent, local position is fine and faster.
           
           for (let i = 0; i < this.obstacles.length; i++) {
             const obs = this.obstacles[i];
@@ -348,7 +353,7 @@
           <!-- Position y=0.125 puts it exactly on top of floor (height 0.25 / 2) -->
           <a-box 
             id="player" 
-            color="#2196F3" 
+            color="#52F27A" 
             width="0.25" 
             height="0.25" 
             depth="0.25" 
