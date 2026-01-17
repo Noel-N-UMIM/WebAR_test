@@ -1,80 +1,97 @@
+<!DOCTYPE html>
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MindAR Game Example</title>
+    <title>MindAR Interactive Game</title>
     
+    <!-- 1. Load A-Frame 1.4.2 -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     
+    <!-- 2. Load MindAR 1.2.5 -->
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
     
-    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
+    <!-- 3. Load A-Frame Extras 7.2.0 (For Animation) -->
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
 
     <style>
-      /* Style for the Jump Button */
+      body { margin: 0; overflow: hidden; }
+      
+      /* UI Overlay for the Game */
       #ui-layer {
         position: absolute;
-        bottom: 30px;
+        bottom: 20px;
         left: 0;
         width: 100%;
-        text-align: center;
-        z-index: 100;
-        display: none; /* Hidden until target is found */
+        height: 100%;
+        pointer-events: none; /* Let clicks pass through to 3D scene except on buttons */
+        z-index: 999;
+        display: none; /* Hidden until AR target is found */
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        align-items: center;
       }
       
+      /* The Jump Button */
       #jump-btn {
-        background-color: #ff4081;
+        pointer-events: auto; /* Enable clicking on the button */
+        background: linear-gradient(135deg, #ff4081, #d81b60);
         color: white;
         border: 4px solid white;
-        padding: 20px 40px;
+        padding: 20px 60px;
         font-size: 24px;
-        font-weight: bold;
+        font-weight: 800;
         border-radius: 50px;
-        font-family: sans-serif;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         text-transform: uppercase;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
+        box-shadow: 0px 5px 15px rgba(0,0,0,0.5);
+        margin-bottom: 40px;
+        transition: transform 0.1s;
+        cursor: pointer;
       }
 
       #jump-btn:active {
-        background-color: #d81b60;
         transform: scale(0.95);
+        background: #c2185b;
       }
       
-      #game-over-msg {
-        display: none;
-        background: rgba(0,0,0,0.8);
-        color: red;
-        padding: 10px;
-        border-radius: 5px;
-        margin-bottom: 10px;
+      /* Game Over Message */
+      #status-msg {
+        pointer-events: auto;
+        background: rgba(0, 0, 0, 0.85);
+        color: #ff5252;
+        padding: 15px 25px;
+        border-radius: 10px;
+        margin-bottom: 20px;
         font-family: sans-serif;
         font-weight: bold;
+        font-size: 18px;
+        text-align: center;
+        display: none;
+        border: 2px solid #ff5252;
       }
     </style>
 
     <script>
-      // --- EXISTING COMPONENT: FOLLOW TARGET (With your smoothing logic) ---
+      // --- COMPONENT 1: SMOOTH TRACKING (Your original logic) ---
       AFRAME.registerComponent('follow-target', {
         schema: {
           target: { type: 'selector' },
           isTracking: { type: 'boolean', default: false },
-          smoothFactor: { type: 'number', default: 0.1 } // Adjusted to 0.1 for smoother drift
+          smoothFactor: { type: 'number', default: 0.1 }
         },
-        
         init: function() {
           this.targetPos = new THREE.Vector3();
           this.targetQuat = new THREE.Quaternion();
           this.targetScale = new THREE.Vector3();
         },
-
         tick: function (time, timeDelta) {
           if (!this.data.isTracking) return;
-          
           const targetEl = this.data.target;
           if (!targetEl || !targetEl.object3D.visible) return;
 
           const elObj = this.el.object3D;
           const targetObj = targetEl.object3D;
-
           targetObj.getWorldPosition(this.targetPos);
           targetObj.getWorldQuaternion(this.targetQuat);
           targetObj.getWorldScale(this.targetScale);
@@ -91,176 +108,192 @@
              elObj.scale.lerp(this.targetScale, factor);
           }
         },
-        
         startTracking: function () {
           this.data.isTracking = true;
           this.el.setAttribute('visible', 'true');
         },
-        
         stopTracking: function () {
           this.data.isTracking = false;
         }
       });
 
-      // --- NEW COMPONENT: PLAYER CONTROLLER (JUMP LOGIC) ---
+      // --- COMPONENT 2: PLAYER JUMP LOGIC ---
       AFRAME.registerComponent('player-jump', {
         schema: {
           isJumping: { type: 'boolean', default: false },
-          jumpHeight: { type: 'number', default: 0.5 },
           groundY: { type: 'number', default: 0 }
         },
 
         init: function() {
           this.velocity = 0;
-          this.gravity = -0.002; // Simple gravity
+          this.gravity = -0.003; 
           this.jumpPower = 0.08;
+          this.isDead = false;
           
-          // Bind button to this component
-          const btn = document.querySelector('#jump-btn');
-          btn.addEventListener('click', () => {
-            this.triggerJump();
+          // Wait for model to load before initializing animations
+          this.el.addEventListener('model-loaded', () => {
+             // console.log("Robot loaded - starting animation");
+             this.startRun();
           });
-          
-          // Start running animation
+
+          // Bind Jump Button
+          const btn = document.querySelector('#jump-btn');
+          if (btn) {
+            btn.addEventListener('click', (e) => {
+              e.preventDefault(); // Stop ghost clicks
+              e.stopPropagation();
+              this.triggerJump();
+            });
+            // Touch support for mobile
+            btn.addEventListener('touchstart', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              this.triggerJump();
+            });
+          } else {
+            console.warn("Jump button not found in DOM");
+          }
+        },
+
+        startRun: function() {
+          if(this.isDead) return;
           this.el.setAttribute('animation-mixer', {
             clip: 'Running',
             loop: 'repeat',
-            crossFadeDuration: 0.4
+            crossFadeDuration: 0.3
           });
         },
 
         triggerJump: function() {
-          if (this.data.isJumping) return; // Prevent double jumping
+          if (this.data.isJumping || this.isDead) return;
           
           this.data.isJumping = true;
           this.velocity = this.jumpPower;
           
-          // Switch to Jump animation
           this.el.setAttribute('animation-mixer', {
             clip: 'Jump',
             loop: 'once',
+            clampWhenFinished: true,
             crossFadeDuration: 0.2
+          });
+        },
+
+        setDead: function() {
+          if(this.isDead) return;
+          this.isDead = true;
+          this.el.setAttribute('animation-mixer', {
+            clip: 'Death',
+            loop: 'once',
+            clampWhenFinished: true
           });
         },
 
         tick: function(time, timeDelta) {
           if (!this.data.isJumping) return;
 
-          // Physics Logic
+          // Physics Loop
           const el = this.el;
           let currentY = el.object3D.position.y;
           
-          // Apply velocity
-          currentY += this.velocity * (timeDelta / 16); // Normalize for framerate
-          this.velocity += this.gravity * (timeDelta / 16);
+          // Apply gravity
+          const deltaFrame = timeDelta / 16; // normalize to 60fps
+          currentY += this.velocity * deltaFrame;
+          this.velocity += this.gravity * deltaFrame;
 
-          // Floor collision
+          // Floor Hit Check
           if (currentY <= this.data.groundY) {
             currentY = this.data.groundY;
             this.data.isJumping = false;
             this.velocity = 0;
-            
-            // Back to running
-            this.el.setAttribute('animation-mixer', {
-              clip: 'Running',
-              loop: 'repeat',
-              crossFadeDuration: 0.2
-            });
+            this.startRun(); // Resume running
           }
 
           el.object3D.position.y = currentY;
         }
       });
 
-      // --- NEW COMPONENT: GAME MANAGER (SPAWN OBSTACLES) ---
+      // --- COMPONENT 3: GAME MANAGER (Spawns Obstacles) ---
       AFRAME.registerComponent('game-manager', {
-        schema: {
-          isPlaying: { type: 'boolean', default: true },
-          speed: { type: 'number', default: 0.02 }
-        },
-
         init: function() {
-          this.obstacles = [];
           this.timer = 0;
-          this.spawnRate = 2000; // Spawn every 2 seconds
+          this.spawnRate = 2500;
+          this.obstacles = [];
+          this.isPlaying = true;
+          this.playerEl = null;
           
-          this.player = document.querySelector('#robot-model');
-          this.gameOverMsg = document.querySelector('#game-over-msg');
+          this.msgEl = document.querySelector('#status-msg');
         },
 
         tick: function(time, timeDelta) {
-          if (!this.data.isPlaying) return;
+          if (!this.isPlaying) return;
+
+          // Find player safely
+          if (!this.playerEl) {
+            this.playerEl = document.querySelector('#robot-model');
+            return; // Skip this frame if player not ready
+          }
 
           this.timer += timeDelta;
-          
-          // 1. Spawn Obstacles
+
+          // Spawn
           if (this.timer > this.spawnRate) {
             this.spawnObstacle();
             this.timer = 0;
-            // Make game harder over time
-            if (this.spawnRate > 800) this.spawnRate -= 50; 
+            if (this.spawnRate > 1000) this.spawnRate -= 50; // Speed up
           }
 
-          // 2. Move Obstacles & Check Collision
+          // Move & Collide
+          const playerPos = this.playerEl.object3D.position;
+          
           for (let i = 0; i < this.obstacles.length; i++) {
             const obs = this.obstacles[i];
-            const pos = obs.object3D.position;
             
-            // Move left
-            pos.x -= this.data.speed * (timeDelta / 16);
+            // Move Left
+            obs.object3D.position.x -= 0.02 * (timeDelta / 16);
 
-            // Cleanup if off screen
-            if (pos.x < -1) {
-              obs.parentNode.removeChild(obs);
-              this.obstacles.splice(i, 1);
-              i--;
-              continue;
+            // Distance Check (Collision)
+            // Robot is at x: -0.3. Obstacle moves +x to -x
+            const distX = Math.abs(obs.object3D.position.x - playerPos.x);
+            const distY = Math.abs(obs.object3D.position.y - playerPos.y);
+
+            // Hitbox
+            if (distX < 0.15 && distY < 0.15) {
+              this.gameOver();
             }
 
-            // COLLISION DETECTION
-            // Simple distance check. Adjust distance based on model size.
-            if (this.player) {
-              const playerPos = this.player.object3D.position;
-              
-              // Only check X and Y distance
-              const dx = Math.abs(pos.x - playerPos.x); // Horizontal distance
-              const dy = Math.abs(pos.y - playerPos.y); // Vertical (jump) distance
-              
-              // Hitbox size: 0.2
-              if (dx < 0.15 && dy < 0.2) {
-                this.gameOver();
-              }
+            // Cleanup
+            if (obs.object3D.position.x < -1.5) {
+              if (obs.parentNode) obs.parentNode.removeChild(obs);
+              this.obstacles.splice(i, 1);
+              i--;
             }
           }
         },
 
         spawnObstacle: function() {
-          const parent = this.el; // Attach to the persistent content so it moves with the card
-          const box = document.createElement('a-box');
+          const el = document.createElement('a-entity');
+          el.setAttribute('geometry', 'primitive: box; width: 0.15; height: 0.15; depth: 0.15');
+          el.setAttribute('material', 'color: red');
+          el.setAttribute('position', '1.5 0 0'); // Spawn on right
           
-          box.setAttribute('color', 'red');
-          box.setAttribute('scale', '0.15 0.15 0.15');
-          box.setAttribute('position', '1 0 0'); // Start on the right side
-          
-          parent.appendChild(box);
-          this.obstacles.push(box);
+          // Attach to the persistent content container (so it follows the card)
+          this.el.appendChild(el);
+          this.obstacles.push(el);
         },
 
         gameOver: function() {
-          this.data.isPlaying = false;
-          this.gameOverMsg.style.display = 'block';
-          this.gameOverMsg.innerText = "GAME OVER! Reload to restart.";
-          
-          // Play Death Animation
-          this.player.setAttribute('animation-mixer', {
-            clip: 'Death',
-            loop: 'once',
-            clampWhenFinished: true
-          });
+          this.isPlaying = false;
+          if (this.msgEl) {
+            this.msgEl.style.display = 'block';
+            this.msgEl.innerHTML = "CRASH! <br> Reload page to play again.";
+          }
+          if (this.playerEl && this.playerEl.components['player-jump']) {
+            this.playerEl.components['player-jump'].setDead();
+          }
         }
       });
 
-      // DOM Loaded Listener
+      // --- SYSTEM: UI CONTROL ---
       document.addEventListener("DOMContentLoaded", function() {
         const exampleTarget = document.querySelector('#example-target');
         const content = document.querySelector('#persistent-content');
@@ -271,31 +304,70 @@
           exampleTarget.addEventListener("targetFound", event => {
             console.log("Target Found");
             content.components['follow-target'].startTracking();
-            uiLayer.style.display = 'block'; // Show Jump Button
+            // Show UI
+            if(uiLayer) uiLayer.style.display = 'flex';
           });
 
           exampleTarget.addEventListener("targetLost", event => {
             console.log("Target Lost");
             content.components['follow-target'].stopTracking();
-            // We keep the game running and button visible
-            // If you want to pause the game on loss, you'd access the game-manager component here
+            // Hide UI
+            // if(uiLayer) uiLayer.style.display = 'none'; // Optional: keep button visible or hide
           });
-          
         }
       });
     </script>
   </head>
   <body>
+    <!-- 2D UI Layer -->
     <div id="ui-layer">
-      <div id="game-over-msg"></div>
-      <button id="jump-btn">JUMP</button>
+      <div id="status-msg"></div>
+      <div id="jump-btn">JUMP</div>
     </div>
 
+    <!-- 3D Scene -->
+    <!-- Reduced missTolerance to standard to ensure tracking starts quickly -->
     <a-scene 
-      mindar-image="imageTargetSrc: targets.mind; uiScanning: no; missTolerance: 3; warmupTolerance: 2;" 
+      mindar-image="imageTargetSrc: targets.mind; uiScanning: no; missTolerance: 5; warmupTolerance: 5;" 
       color-space="sRGB" 
       renderer="colorManagement: true, physicallyCorrectLights" 
       vr-mode-ui="enabled: false" 
       device-orientation-permission-ui="enabled: false">
       
       <a-assets>
+        <img id="card" src="card_MindAR.png" />
+        <!-- We do NOT preload the glb in a-assets to prevent loading freeze -->
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <!-- Target -->
+      <a-entity id="example-target" mindar-image-target="targetIndex: 0"></a-entity>
+      
+      <!-- Content Container -->
+      <a-entity 
+        id="persistent-content" 
+        visible="false" 
+        follow-target="target: #example-target"
+        game-manager> <!-- Spawns obstacles here -->
+        
+        <!-- Floor -->
+        <a-plane color="#222" rotation="-90 0 0" width="10" height="2" position="0 -0.01 0" opacity="0.7"></a-plane>
+
+        <!-- Player Model -->
+        <!-- Using standard RobotExpressive from a reliable CDN -->
+        <!-- It supports: 'Idle', 'Walking', 'Running', 'Jump', 'Death', etc. -->
+        <a-entity 
+          id="robot-model"
+          gltf-model="https://cdn.jsdelivr.net/gh/DonMcCurdy/aframe-extras@v6.1.1/assets/robot.glb" 
+          scale="0.05 0.05 0.05"
+          rotation="0 90 0" 
+          position="-0.3 0 0" 
+          player-jump
+        ></a-entity> 
+        
+      </a-entity>
+
+    </a-scene>
+  </body>
+</html>
