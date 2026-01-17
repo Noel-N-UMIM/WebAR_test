@@ -51,7 +51,7 @@
         background: #4CAF50; /* Green */
         padding: 15px 40px;
         font-size: 24px;
-        margin-bottom: 20px;
+        margin-bottom: 80px; /* Positioned higher than jump button */
       }
 
       #jump-btn {
@@ -65,20 +65,21 @@
         background: #f44336; /* Red */
         padding: 15px 40px;
         font-size: 24px;
-        margin-bottom: 20px;
+        margin-bottom: 80px;
       }
 
-      /* Status Messages */
+      /* Instructions / Status */
       #status-msg {
         position: absolute;
-        top: 20px;
+        top: 40%;
         background: rgba(0, 0, 0, 0.7);
         color: white;
-        padding: 10px 20px;
+        padding: 20px 30px;
         border-radius: 20px;
-        font-size: 16px;
+        font-size: 20px;
         text-align: center;
         pointer-events: none;
+        display: block;
       }
     </style>
 
@@ -111,7 +112,7 @@
           this.velocity = 0;
           this.el.object3D.position.y = this.data.groundY;
           this.el.setAttribute('rotation', '0 0 0');
-          this.el.setAttribute('material', 'color', '#2196F3'); // Reset color to Blue
+          this.el.setAttribute('material', 'color', '#52F27A'); // Reset color to Blue
         },
         die: function() {
           this.isDead = true;
@@ -121,7 +122,7 @@
         tick: function(time, timeDelta) {
           if (this.isDead) return;
 
-          // Apply Gravity
+          // Only apply physics if jumping or above ground
           if (this.isJumping || this.el.object3D.position.y > this.data.groundY) {
             const dt = timeDelta / 16; // Normalize to ~60fps
             this.velocity += this.data.gravity * dt;
@@ -157,10 +158,17 @@
           
           // Game Variables
           this.isPlaying = false;
+          this.isGameOver = false;
           this.obstacles = [];
           this.timer = 0;
           this.spawnInterval = 2000;
           this.gameSpeed = 0.03;
+
+          // Initial UI State: Hide everything except instructions
+          this.uiStart.style.display = 'none';
+          this.uiJump.style.display = 'none';
+          this.uiRestart.style.display = 'none';
+          this.statusMsg.innerText = "Scan Target to Play";
 
           // Bind UI events
           this.uiStart.addEventListener('click', () => this.startGame());
@@ -168,8 +176,8 @@
           
           // Jump Event (Mouse & Touch)
           const handleJump = (e) => {
-            e.preventDefault(); // Prevent ghost clicks
-            if (this.isPlaying) {
+            e.preventDefault(); 
+            if (this.isPlaying && !this.isGameOver) {
               this.player.components['player-controller'].jump();
             }
           };
@@ -177,35 +185,41 @@
           this.uiJump.addEventListener('touchstart', handleJump);
 
           // MindAR Events for "Ready" state
-          const scene = document.querySelector('a-scene');
           const target = document.getElementById('image-target');
           
           target.addEventListener('targetFound', () => {
             console.log("Target Found");
-            if (!this.isPlaying) {
-              // Only show Start button if we aren't already playing
-              this.uiStart.style.display = 'block';
-              this.statusMsg.innerText = "Target Found! Press START.";
-            }
-            // Make game visible
+            
+            // Show AR Content immediately
             this.gameContainer.setAttribute('visible', 'true');
+
+            // If we are NOT playing and NOT in game over state, show Start button
+            if (!this.isPlaying && !this.isGameOver) {
+              this.statusMsg.style.display = 'none'; // Hide instructions
+              this.uiStart.style.display = 'block'; // Show Start
+            }
           });
 
           target.addEventListener('targetLost', () => {
             console.log("Target Lost");
-            this.statusMsg.innerText = "Target Lost. Scan image to resume.";
-            // Hide buttons to prevent confusion, but pause logic is tricky in AR
-            // We'll keep game running in background but hide jump button
-            if(this.isPlaying) {
-               this.uiJump.style.display = 'none';
-            }
+            // Show scanning instructions again
+            this.statusMsg.style.display = 'block';
+            this.statusMsg.innerText = "Target Lost. Scan Image.";
+            
+            // Hide all game buttons to avoid confusion
             this.uiStart.style.display = 'none';
+            this.uiJump.style.display = 'none';
+            this.uiRestart.style.display = 'none';
+            
+            // Pause the game loop effectively
+            this.isPlaying = false; 
           });
         },
 
         startGame: function() {
           console.log("Game Started");
           this.isPlaying = true;
+          this.isGameOver = false;
           this.obstacles = [];
           this.timer = 0;
           this.spawnInterval = 2000;
@@ -220,44 +234,46 @@
             if (el.parentNode) el.parentNode.removeChild(el);
           });
 
-          // Update UI
+          // Update UI: Hide Start/Restart, Show Jump
           this.uiStart.style.display = 'none';
           this.uiRestart.style.display = 'none';
+          this.statusMsg.style.display = 'none'; // Ensure text is gone
           this.uiJump.style.display = 'block';
-          this.statusMsg.innerText = "Dodge the Spheres!";
         },
 
         gameOver: function() {
           console.log("Game Over");
           this.isPlaying = false;
+          this.isGameOver = true;
           this.player.components['player-controller'].die();
           
-          // Update UI
+          // Update UI: Hide Jump, Show Restart
           this.uiJump.style.display = 'none';
           this.uiRestart.style.display = 'block';
-          this.statusMsg.innerHTML = "GAME OVER";
+          this.statusMsg.style.display = 'block';
+          this.statusMsg.innerText = "GAME OVER";
         },
 
         spawnObstacle: function() {
-          // Use a-entity with explicit geometry/material to prevent rendering glitches
+          // Use a-entity with explicit geometry/material
           const el = document.createElement('a-entity');
           el.setAttribute('class', 'obstacle');
           
-          // Explicitly define geometry
+          // Geometry: Sphere
           el.setAttribute('geometry', 'primitive: sphere; radius: 0.15');
           
-          // Use 'flat' shader to ensure visibility regardless of lighting conditions/updates
+          // Material: Flat Shader (Self-illuminated) so it's always visible
           el.setAttribute('material', 'color: #FF0000; shader: flat');
           
-          // Set initial position
+          // Position: Start off to the right
           el.setAttribute('position', '1.5 0.15 0'); 
           
-          // Important: Append to gameContainer so it moves relative to the marker
           this.gameContainer.appendChild(el);
           this.obstacles.push(el);
         },
 
         tick: function(time, timeDelta) {
+          // CRITICAL: Stop everything if not playing
           if (!this.isPlaying) return;
 
           // 1. Spawning Logic
@@ -265,7 +281,7 @@
           if (this.timer > this.spawnInterval) {
             this.spawnObstacle();
             this.timer = 0;
-            // Gradually speed up spawning
+            // Gradually speed up
             if (this.spawnInterval > 800) this.spawnInterval -= 50;
           }
 
@@ -275,24 +291,24 @@
           for (let i = 0; i < this.obstacles.length; i++) {
             const obs = this.obstacles[i];
 
-            // SAFETY CHECK: If obstacle isn't fully loaded in Three.js yet, skip
+            // Safety Check
             if (!obs.object3D) continue;
 
             // Move Left
             obs.object3D.position.x -= this.gameSpeed * (timeDelta / 16);
 
-            // Check Collision
-            // Simple distance check (Circle vs Box approximation)
-            // Player is roughly at x=-0.3, y changes
+            // Check Collision (Distance between centers)
             const dx = obs.object3D.position.x - playerPos.x;
             const dy = obs.object3D.position.y - playerPos.y;
             const distance = Math.sqrt(dx*dx + dy*dy);
 
-            if (distance < 0.3) { // 0.15 radius + 0.125 box half-size approx
+            // Radius (0.15) + Player Half-Size (approx 0.125) = ~0.275 threshold
+            if (distance < 0.25) { 
               this.gameOver();
+              return; // Stop processing this frame
             }
 
-            // Despawn if off screen to the left
+            // Despawn
             if (obs.object3D.position.x < -1.5) {
               obs.parentNode.removeChild(obs);
               this.obstacles.splice(i, 1);
@@ -307,7 +323,7 @@
 
     <!-- 2D UI Overlay -->
     <div id="ui-layer">
-      <div id="status-msg">Initializing... Scan Target</div>
+      <div id="status-msg">Scan Target to Play</div>
       <div id="start-btn" class="game-btn">START GAME</div>
       <div id="restart-btn" class="game-btn">TRY AGAIN</div>
       <div id="jump-btn" class="game-btn">JUMP</div>
@@ -322,7 +338,7 @@
       device-orientation-permission-ui="enabled: false">
 
       <a-assets>
-        <!-- Placeholder assets if needed -->
+        <!-- Assets here -->
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -335,10 +351,9 @@
       <a-entity id="image-target" mindar-image-target="targetIndex: 0">
         
         <!-- Game Container (Attached to Image Target) -->
-        <!-- This entire container becomes visible when target is found -->
         <a-entity id="game-container" visible="false" game-manager>
           
-          <!-- Floor Plane (Visible Reference) -->
+          <!-- Floor Plane -->
           <a-plane 
             color="#FFFFFF" 
             opacity="0.3" 
@@ -349,8 +364,6 @@
           </a-plane>
 
           <!-- Player (Blue Box) -->
-          <!-- Position x=-0.3 puts it on the left side -->
-          <!-- Position y=0.125 puts it exactly on top of floor (height 0.25 / 2) -->
           <a-box 
             id="player" 
             color="#52F27A" 
@@ -360,8 +373,6 @@
             position="-0.3 0.125 0"
             player-controller="groundY: 0.125">
           </a-box>
-
-          <!-- Obstacles will be spawned here by game-manager -->
 
         </a-entity>
       </a-entity>
