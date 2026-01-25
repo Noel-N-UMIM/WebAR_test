@@ -2,13 +2,12 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MindAR Game: Dodge the 3D Model</title>
+    <title>MindAR Game: 3D Player & 3D Obstacles</title>
     
     <!-- Libraries -->
-    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-    <!-- A-Frame Extras: Required for animation-mixer -->
-    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.4.0/dist/aframe-extras.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.4.0/dist/aframe-extras.min.js" crossorigin="anonymous"></script>
 
     <style>
       body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -40,7 +39,7 @@
         cursor: pointer;
         box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
         transition: transform 0.1s, background 0.2s;
-        display: none; /* Hidden by default */
+        display: none;
         text-align: center;
         user-select: none;
       }
@@ -50,27 +49,26 @@
       }
 
       #start-btn {
-        background: #4CAF50; /* Green */
+        background: #4CAF50;
         padding: 15px 40px;
         font-size: 24px;
         margin-bottom: 80px; 
       }
 
       #jump-btn {
-        background: #2196F3; /* Blue */
+        background: #2196F3;
         padding: 25px 80px; 
         font-size: 28px;
         margin-bottom: 20px;
       }
 
       #restart-btn {
-        background: #f44336; /* Red */
+        background: #f44336;
         padding: 15px 40px;
         font-size: 24px;
         margin-bottom: 80px;
       }
 
-      /* Instructions / Status */
       #status-msg {
         position: absolute;
         top: 40%;
@@ -88,43 +86,62 @@
     <script>
       /**
        * COMPONENT: PLAYER CONTROLLER
-       * Handles physics (gravity, jumping) and collision state.
+       * Handles physics, jumping, and model state (animations).
        */
       AFRAME.registerComponent('player-controller', {
         schema: {
           jumpForce: { type: 'number', default: 0.05 },
           gravity: { type: 'number', default: -0.0025 },
-          groundY: { type: 'number', default: 0 }
+          groundY: { type: 'number', default: 0 } // 0 is typical for models (feet at origin)
         },
         init: function() {
           this.velocity = 0;
           this.isJumping = false;
           this.isDead = false;
+          
+          // Store the initial rotation set in HTML so we can reset to it
+          // (Models often need specific rotations like 0 90 0)
+          this.initialRotation = Object.assign({}, this.el.getAttribute('rotation'));
         },
         jump: function() {
           if (this.isJumping || this.isDead) return;
           this.velocity = this.data.jumpForce;
           this.isJumping = true;
-          // Visual: slight tilt
-          this.el.setAttribute('rotation', '0 0 15');
+          
+          // OPTIONAL: If your model has a specific jump clip, play it here:
+          // this.el.setAttribute('animation-mixer', 'clip: Jump; loop: once');
         },
         reset: function() {
           this.isDead = false;
           this.isJumping = false;
           this.velocity = 0;
           this.el.object3D.position.y = this.data.groundY;
-          this.el.setAttribute('rotation', '0 0 0');
-          this.el.setAttribute('material', 'color', '#52F27A'); 
+          
+          // Reset Rotation to what it was at start
+          this.el.setAttribute('rotation', this.initialRotation);
+          
+          // Resume Animation (e.g. Run/Idle)
+          this.el.setAttribute('animation-mixer', 'timeScale: 1');
         },
         die: function() {
           this.isDead = true;
-          this.el.setAttribute('material', 'color', '#555'); 
-          this.el.setAttribute('rotation', '0 0 90'); 
+          
+          // Pause Animation (Freeze frame)
+          this.el.setAttribute('animation-mixer', 'timeScale: 0'); 
+          
+          // Tip over effect
+          // We keep the current Y rotation but tip Z to 90
+          const currentRot = this.el.getAttribute('rotation');
+          this.el.setAttribute('rotation', {
+            x: currentRot.x, 
+            y: currentRot.y, 
+            z: 90
+          }); 
         },
         tick: function(time, timeDelta) {
           if (this.isDead) return;
 
-          // Only apply physics if jumping or above ground
+          // Physics Logic
           if (this.isJumping || this.el.object3D.position.y > this.data.groundY) {
             const dt = timeDelta / 16; 
             this.velocity += this.data.gravity * dt;
@@ -136,7 +153,9 @@
               newY = this.data.groundY;
               this.velocity = 0;
               this.isJumping = false;
-              this.el.setAttribute('rotation', '0 0 0');
+              
+              // Reset visual tilt from jump if we aren't using animation clips
+              // If you are using animation clips, switch back to 'Run' here
             }
             
             this.el.object3D.position.y = newY;
@@ -146,20 +165,16 @@
 
       /**
        * COMPONENT: GAME MANAGER
-       * Handles game state, UI toggling, and obstacle spawning loop.
        */
       AFRAME.registerComponent('game-manager', {
-        // --- CONFIGURATION ---
-        // Adjust these values to fit your specific 3D model
         schema: {
-          obstacleScale: { type: 'vec3', default: {x: 0.5, y: 0.5, z: 0.5} }, // Scale of the model
-          obstacleY: { type: 'number', default: 0 }, // Height (0 is usually floor for characters)
-          obstacleRotation: { type: 'vec3', default: {x: 0, y: 90, z: 0} }, // Rotate if facing wrong way
-          collisionThreshold: { type: 'number', default: 0.25 } // How close until game over
+          obstacleScale: { type: 'vec3', default: {x: 0.5, y: 0.5, z: 0.5} },
+          obstacleY: { type: 'number', default: 0 },
+          obstacleRotation: { type: 'vec3', default: {x: 0, y: 90, z: 0} },
+          collisionThreshold: { type: 'number', default: 0.25 }
         },
 
         init: function() {
-          // DOM Elements
           this.uiStart = document.getElementById('start-btn');
           this.uiJump = document.getElementById('jump-btn');
           this.uiRestart = document.getElementById('restart-btn');
@@ -167,7 +182,6 @@
           this.player = document.getElementById('player');
           this.gameContainer = document.getElementById('game-container');
           
-          // Game Variables
           this.isPlaying = false;
           this.isGameOver = false;
           this.obstacles = [];
@@ -175,13 +189,11 @@
           this.spawnInterval = 2000;
           this.gameSpeed = 0.03;
 
-          // Initial UI State
           this.uiStart.style.display = 'none';
           this.uiJump.style.display = 'none';
           this.uiRestart.style.display = 'none';
           this.statusMsg.innerText = "Scan Target to Play";
 
-          // Bind UI events
           this.uiStart.addEventListener('click', () => this.startGame());
           this.uiRestart.addEventListener('click', () => this.startGame());
           
@@ -194,7 +206,6 @@
           this.uiJump.addEventListener('mousedown', handleJump);
           this.uiJump.addEventListener('touchstart', handleJump);
 
-          // MindAR Events
           const target = document.getElementById('image-target');
           
           target.addEventListener('targetFound', () => {
@@ -228,7 +239,6 @@
 
           this.player.components['player-controller'].reset();
 
-          // Clear old obstacles
           const oldObs = document.querySelectorAll('.obstacle');
           oldObs.forEach(el => {
             if (el.parentNode) el.parentNode.removeChild(el);
@@ -255,25 +265,15 @@
         spawnObstacle: function() {
           const el = document.createElement('a-entity');
           el.setAttribute('class', 'obstacle');
-          
-          // --- UPDATED MODEL LOADING ---
-          // 1. Attach the .glb model
           el.setAttribute('gltf-model', '#obstacle-model');
-          
-          // 2. Play Animations (using A-Frame Extras)
-          // 'clip: *' plays the first available animation
           el.setAttribute('animation-mixer', 'clip: *; loop: repeat; timeScale: 1');
-
-          // 3. Apply Configured Scale (from Schema)
+          
           const s = this.data.obstacleScale;
           el.setAttribute('scale', `${s.x} ${s.y} ${s.z}`);
 
-          // 4. Apply Rotation (from Schema)
           const r = this.data.obstacleRotation;
           el.setAttribute('rotation', `${r.x} ${r.y} ${r.z}`);
           
-          // 5. Position
-          // Start off to the right (x=1.5), at configured Y height
           el.setAttribute('position', `1.5 ${this.data.obstacleY} 0`); 
           
           this.gameContainer.appendChild(el);
@@ -283,7 +283,6 @@
         tick: function(time, timeDelta) {
           if (!this.isPlaying) return;
 
-          // 1. Spawning Logic
           this.timer += timeDelta;
           if (this.timer > this.spawnInterval) {
             this.spawnObstacle();
@@ -291,28 +290,23 @@
             if (this.spawnInterval > 800) this.spawnInterval -= 50;
           }
 
-          // 2. Move Obstacles & Check Collision
           const playerPos = this.player.object3D.position;
           
           for (let i = 0; i < this.obstacles.length; i++) {
             const obs = this.obstacles[i];
             if (!obs.object3D) continue;
 
-            // Move Left
             obs.object3D.position.x -= this.gameSpeed * (timeDelta / 16);
 
-            // Check Collision (Distance between centers)
             const dx = obs.object3D.position.x - playerPos.x;
             const dy = obs.object3D.position.y - playerPos.y;
             const distance = Math.sqrt(dx*dx + dy*dy);
 
-            // Use configured threshold
             if (distance < this.data.collisionThreshold) { 
               this.gameOver();
               return; 
             }
 
-            // Despawn
             if (obs.object3D.position.x < -1.5) {
               obs.parentNode.removeChild(obs);
               this.obstacles.splice(i, 1);
@@ -337,14 +331,17 @@
     <a-scene 
       mindar-image="imageTargetSrc: targets.mind; uiScanning: no;" 
       color-space="sRGB" 
-      renderer="colorManagement: true, physicallyCorrectLights" 
+      renderer="colorManagement: true" 
       vr-mode-ui="enabled: false" 
       device-orientation-permission-ui="enabled: false">
 
       <a-assets>
-        <!-- REPLACE 'obstacle.glb' WITH YOUR FILE NAME -->
-        <!-- Ensure the .glb file is in the same folder as this HTML file -->
-        <a-asset-item id="obstacle-model" src="Wolf.glb"></a-asset-item>
+        <!-- Obstacle Model -->
+        <a-asset-item id="obstacle-model" src="Present.glb"></a-asset-item>
+        
+        <!-- NEW: Player Model -->
+        <!-- Ensure you have a 'player.glb' file in the same folder -->
+        <a-asset-item id="player-model" src="Wolf.glb"></a-asset-item>
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -355,10 +352,6 @@
       <!-- Target Anchor -->
       <a-entity id="image-target" mindar-image-target="targetIndex: 0">
         
-        <!-- Game Container 
-             NOTE: You can adjust obstacle settings here too, e.g.:
-             game-manager="obstacleScale: 0.1 0.1 0.1; obstacleY: 0.05"
-        -->
         <a-entity id="game-container" visible="false" game-manager>
           
           <!-- Floor Plane -->
@@ -371,16 +364,21 @@
             position="0 0 0">
           </a-plane>
 
-          <!-- Player (Blue Box) -->
-          <a-box 
+          <!-- PLAYER ENTITY (New 3D Model) -->
+          <!-- 
+             Adjust 'scale' to fit your specific model size.
+             Adjust 'rotation' if your model is facing the wrong way.
+             'animation-mixer' will automatically play the default animation (Walk/Run).
+          -->
+          <a-entity 
             id="player" 
-            color="#52F27A" 
-            width="0.25" 
-            height="0.25" 
-            depth="0.25" 
-            position="-0.3 0.125 0"
-            player-controller="groundY: 0.125">
-          </a-box>
+            gltf-model="#player-model"
+            scale="0.5 0.5 0.5"
+            rotation="0 90 0"
+            position="-0.3 0 0"
+            animation-mixer="clip: *; loop: repeat"
+            player-controller="groundY: 0">
+          </a-entity>
 
         </a-entity>
       </a-entity>
