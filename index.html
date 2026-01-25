@@ -168,7 +168,7 @@
        */
       AFRAME.registerComponent('game-manager', {
         schema: {
-          obstacleScale: { type: 'vec3', default: {x: 0.5, y: 0.5, z: 0.5} },
+          obstacleScale: { type: 'vec3', default: {x: 0.1, y: 0.1, z: 0.1} },
           obstacleY: { type: 'number', default: 0 },
           obstacleRotation: { type: 'vec3', default: {x: 0, y: 90, z: 0} },
           collisionThreshold: { type: 'number', default: 0.25 }
@@ -373,8 +373,8 @@
           <a-entity 
             id="player" 
             gltf-model="#player-model"
-            scale="0.5 0.5 0.5"
-            rotation="0 90 0"
+            scale="0.4 0.4 0.4"
+            rotation="0 180 0"
             position="-0.3 0 0"
             animation-mixer="clip: *; loop: repeat"
             player-controller="groundY: 0">
