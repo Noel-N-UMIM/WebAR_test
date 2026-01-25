@@ -2,11 +2,13 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MindAR Game: Dodge the Spheres</title>
+    <title>MindAR Game: Dodge the 3D Model</title>
     
     <!-- Libraries -->
     <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <!-- A-Frame Extras: Required for animation-mixer -->
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.4.0/dist/aframe-extras.min.js"></script>
 
     <style>
       body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -51,12 +53,12 @@
         background: #4CAF50; /* Green */
         padding: 15px 40px;
         font-size: 24px;
-        margin-bottom: 80px; /* Positioned higher than jump button */
+        margin-bottom: 80px; 
       }
 
       #jump-btn {
         background: #2196F3; /* Blue */
-        padding: 25px 80px; /* Big touch target */
+        padding: 25px 80px; 
         font-size: 28px;
         margin-bottom: 20px;
       }
@@ -112,19 +114,19 @@
           this.velocity = 0;
           this.el.object3D.position.y = this.data.groundY;
           this.el.setAttribute('rotation', '0 0 0');
-          this.el.setAttribute('material', 'color', '#52F27A'); // Reset color to Blue
+          this.el.setAttribute('material', 'color', '#52F27A'); 
         },
         die: function() {
           this.isDead = true;
-          this.el.setAttribute('material', 'color', '#555'); // Grey/Black death color
-          this.el.setAttribute('rotation', '0 0 90'); // Tip over
+          this.el.setAttribute('material', 'color', '#555'); 
+          this.el.setAttribute('rotation', '0 0 90'); 
         },
         tick: function(time, timeDelta) {
           if (this.isDead) return;
 
           // Only apply physics if jumping or above ground
           if (this.isJumping || this.el.object3D.position.y > this.data.groundY) {
-            const dt = timeDelta / 16; // Normalize to ~60fps
+            const dt = timeDelta / 16; 
             this.velocity += this.data.gravity * dt;
             
             let newY = this.el.object3D.position.y + (this.velocity * dt);
@@ -147,6 +149,15 @@
        * Handles game state, UI toggling, and obstacle spawning loop.
        */
       AFRAME.registerComponent('game-manager', {
+        // --- CONFIGURATION ---
+        // Adjust these values to fit your specific 3D model
+        schema: {
+          obstacleScale: { type: 'vec3', default: {x: 0.5, y: 0.5, z: 0.5} }, // Scale of the model
+          obstacleY: { type: 'number', default: 0 }, // Height (0 is usually floor for characters)
+          obstacleRotation: { type: 'vec3', default: {x: 0, y: 90, z: 0} }, // Rotate if facing wrong way
+          collisionThreshold: { type: 'number', default: 0.25 } // How close until game over
+        },
+
         init: function() {
           // DOM Elements
           this.uiStart = document.getElementById('start-btn');
@@ -164,7 +175,7 @@
           this.spawnInterval = 2000;
           this.gameSpeed = 0.03;
 
-          // Initial UI State: Hide everything except instructions
+          // Initial UI State
           this.uiStart.style.display = 'none';
           this.uiJump.style.display = 'none';
           this.uiRestart.style.display = 'none';
@@ -174,7 +185,6 @@
           this.uiStart.addEventListener('click', () => this.startGame());
           this.uiRestart.addEventListener('click', () => this.startGame());
           
-          // Jump Event (Mouse & Touch)
           const handleJump = (e) => {
             e.preventDefault(); 
             if (this.isPlaying && !this.isGameOver) {
@@ -184,34 +194,25 @@
           this.uiJump.addEventListener('mousedown', handleJump);
           this.uiJump.addEventListener('touchstart', handleJump);
 
-          // MindAR Events for "Ready" state
+          // MindAR Events
           const target = document.getElementById('image-target');
           
           target.addEventListener('targetFound', () => {
             console.log("Target Found");
-            
-            // Show AR Content immediately
             this.gameContainer.setAttribute('visible', 'true');
-
-            // If we are NOT playing and NOT in game over state, show Start button
             if (!this.isPlaying && !this.isGameOver) {
-              this.statusMsg.style.display = 'none'; // Hide instructions
-              this.uiStart.style.display = 'block'; // Show Start
+              this.statusMsg.style.display = 'none';
+              this.uiStart.style.display = 'block';
             }
           });
 
           target.addEventListener('targetLost', () => {
             console.log("Target Lost");
-            // Show scanning instructions again
             this.statusMsg.style.display = 'block';
             this.statusMsg.innerText = "Target Lost. Scan Image.";
-            
-            // Hide all game buttons to avoid confusion
             this.uiStart.style.display = 'none';
             this.uiJump.style.display = 'none';
             this.uiRestart.style.display = 'none';
-            
-            // Pause the game loop effectively
             this.isPlaying = false; 
           });
         },
@@ -225,7 +226,6 @@
           this.spawnInterval = 2000;
           this.gameSpeed = 0.03;
 
-          // Reset Player
           this.player.components['player-controller'].reset();
 
           // Clear old obstacles
@@ -234,10 +234,9 @@
             if (el.parentNode) el.parentNode.removeChild(el);
           });
 
-          // Update UI: Hide Start/Restart, Show Jump
           this.uiStart.style.display = 'none';
           this.uiRestart.style.display = 'none';
-          this.statusMsg.style.display = 'none'; // Ensure text is gone
+          this.statusMsg.style.display = 'none';
           this.uiJump.style.display = 'block';
         },
 
@@ -247,7 +246,6 @@
           this.isGameOver = true;
           this.player.components['player-controller'].die();
           
-          // Update UI: Hide Jump, Show Restart
           this.uiJump.style.display = 'none';
           this.uiRestart.style.display = 'block';
           this.statusMsg.style.display = 'block';
@@ -255,25 +253,34 @@
         },
 
         spawnObstacle: function() {
-          // Use a-entity with explicit geometry/material
           const el = document.createElement('a-entity');
           el.setAttribute('class', 'obstacle');
           
-          // Geometry: Sphere
-          el.setAttribute('geometry', 'primitive: sphere; radius: 0.15');
+          // --- UPDATED MODEL LOADING ---
+          // 1. Attach the .glb model
+          el.setAttribute('gltf-model', '#obstacle-model');
           
-          // Material: Flat Shader (Self-illuminated) so it's always visible
-          el.setAttribute('material', 'color: #FF0000; shader: flat');
+          // 2. Play Animations (using A-Frame Extras)
+          // 'clip: *' plays the first available animation
+          el.setAttribute('animation-mixer', 'clip: *; loop: repeat; timeScale: 1');
+
+          // 3. Apply Configured Scale (from Schema)
+          const s = this.data.obstacleScale;
+          el.setAttribute('scale', `${s.x} ${s.y} ${s.z}`);
+
+          // 4. Apply Rotation (from Schema)
+          const r = this.data.obstacleRotation;
+          el.setAttribute('rotation', `${r.x} ${r.y} ${r.z}`);
           
-          // Position: Start off to the right
-          el.setAttribute('position', '1.5 0.15 0'); 
+          // 5. Position
+          // Start off to the right (x=1.5), at configured Y height
+          el.setAttribute('position', `1.5 ${this.data.obstacleY} 0`); 
           
           this.gameContainer.appendChild(el);
           this.obstacles.push(el);
         },
 
         tick: function(time, timeDelta) {
-          // CRITICAL: Stop everything if not playing
           if (!this.isPlaying) return;
 
           // 1. Spawning Logic
@@ -281,7 +288,6 @@
           if (this.timer > this.spawnInterval) {
             this.spawnObstacle();
             this.timer = 0;
-            // Gradually speed up
             if (this.spawnInterval > 800) this.spawnInterval -= 50;
           }
 
@@ -290,8 +296,6 @@
           
           for (let i = 0; i < this.obstacles.length; i++) {
             const obs = this.obstacles[i];
-
-            // Safety Check
             if (!obs.object3D) continue;
 
             // Move Left
@@ -302,10 +306,10 @@
             const dy = obs.object3D.position.y - playerPos.y;
             const distance = Math.sqrt(dx*dx + dy*dy);
 
-            // Radius (0.15) + Player Half-Size (approx 0.125) = ~0.275 threshold
-            if (distance < 0.25) { 
+            // Use configured threshold
+            if (distance < this.data.collisionThreshold) { 
               this.gameOver();
-              return; // Stop processing this frame
+              return; 
             }
 
             // Despawn
@@ -338,19 +342,23 @@
       device-orientation-permission-ui="enabled: false">
 
       <a-assets>
-        <!-- Assets here -->
+        <!-- REPLACE 'obstacle.glb' WITH YOUR FILE NAME -->
+        <!-- Ensure the .glb file is in the same folder as this HTML file -->
+        <a-asset-item id="obstacle-model" src="Wolf.glb"></a-asset-item>
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <!-- Light -->
       <a-light type="ambient" intensity="1"></a-light>
       <a-light type="directional" position="1 2 1" intensity="1.5"></a-light>
 
       <!-- Target Anchor -->
       <a-entity id="image-target" mindar-image-target="targetIndex: 0">
         
-        <!-- Game Container (Attached to Image Target) -->
+        <!-- Game Container 
+             NOTE: You can adjust obstacle settings here too, e.g.:
+             game-manager="obstacleScale: 0.1 0.1 0.1; obstacleY: 0.05"
+        -->
         <a-entity id="game-container" visible="false" game-manager>
           
           <!-- Floor Plane -->
